@@ -23,9 +23,33 @@ The signal chain:
 |---|---|
 | Capture | `getUserMedia` with echo cancellation, noise suppression and auto-gain **off**, so the low-frequency rotor tone survives |
 | Transform | 32 768-point FFT, smoothing disabled — 1.46 Hz bins at 48 kHz, i.e. 44 rpm per bin on a 2-blade head |
-| Fundamental | Harmonic product spectrum over 5 harmonics, which stops it locking onto the 2nd harmonic and reporting double rpm |
+| Fundamental | Harmonic product spectrum over 5 harmonics, searched from 300 rpm upward — never floored at the expected minimum |
+| Correction | Sub-harmonic descent: `f/d` is accepted as the real fundamental only when the partials it adds, which `f` cannot account for, are present. For `d=2` those are the odd multiples 1, 3, 5 of `f/2`, and two thirds must be there so one attenuated member cannot sink the test |
+| Slew gate | A candidate implying more than 4 500 rpm/s of change is held back until three consecutive frames agree, which kills harmonic-slip transients without blocking a real spool-up |
 | Refine | Parabolic interpolation on the log-magnitude peak, resolving between bins |
 | Gate | Median-of-5 smoothing plus a confidence threshold; below it the last value is held and greyed rather than flickering |
+
+## Why the search floor matters
+
+A microphone — and far more so a small speaker — rolls off steeply below about
+200 Hz. A rotor at 800 rpm on two blades has its fundamental at 26.7 Hz, which
+can sit 25 dB below its own harmonics. Flooring the search at the expected
+minimum rpm leaves the fundamental outside the window entirely, so the detector
+locks onto whichever harmonic falls inside and reports an integer multiple.
+
+Measured on a simulated spool-up through a small speaker, floor-at-minimum
+versus the current detector:
+
+| True rpm | Floored at minimum | Current |
+|---:|---:|---:|
+| 400 | 1 187 (3×) | 400 |
+| 800 | 3 208 (4×) | 800 |
+| 1 300 | 2 593 (2×) | 1 300 |
+| 2 000 | 3 999 (2×) | 2 000 |
+| 2 400 | 4 790 (2×) | 2 400 |
+
+Readings below the expected minimum are shown and marked out of range rather
+than forced into it, and they never set the peak hold.
 
 ## Self-test
 

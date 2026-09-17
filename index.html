@@ -104,6 +104,7 @@ p{margin:0}
 .big{display:flex;align-items:baseline;gap:8px;margin-top:4px;min-width:0}
 .big .n{font-family:var(--disp);font-weight:700;font-size:clamp(58px,15vw,98px);line-height:.9;letter-spacing:-.015em;font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap}
 .big.stale .n{color:var(--ink-3)}
+.big.oor .n{color:var(--warn)}
 .big .unit{font-family:var(--mono);font-size:14px;color:var(--ink-3);letter-spacing:.06em}
 
 /* band gauge */
@@ -253,8 +254,8 @@ figcaption strong{font-size:13.5px;font-weight:600}
         </div>
       </div>
       <div class="two">
-        <div class="field"><label class="lab" for="rMin">Min rpm</label><input type="number" id="rMin" value="1000" min="200" max="20000" step="50"></div>
-        <div class="field"><label class="lab" for="rMax">Max rpm</label><input type="number" id="rMax" value="6000" min="300" max="30000" step="50"></div>
+        <div class="field"><label class="lab" for="rMin">Expect min</label><input type="number" id="rMin" value="1000" min="200" max="20000" step="50"></div>
+        <div class="field"><label class="lab" for="rMax">Expect max</label><input type="number" id="rMax" value="6000" min="300" max="30000" step="50"></div>
       </div>
       <button class="btn" id="startBtn">Start microphone</button>
       <button class="btn ghost" id="resetBtn">Reset peak hold &amp; trend</button>
@@ -283,12 +284,12 @@ figcaption strong{font-size:13.5px;font-weight:600}
 
 <footer class="notes">
   <div>
-    <h3>How it reads rpm</h3>
-    <p>A rotor radiates a tone at its blade-pass frequency: <code>rpm &times; blades &div; 60</code>. Two blades at 1 000&ndash;6 000 rpm puts that at 33&ndash;200 Hz. A 32 768-point FFT plus a harmonic product spectrum picks the true fundamental, and parabolic interpolation refines it between bins.</p>
+    <h3>Harmonics and spool-up</h3>
+    <p>A rotor radiates a tone at <code>rpm &times; blades &div; 60</code> &mdash; 33&ndash;200 Hz for two blades at 1 000&ndash;6 000 rpm. Microphones roll off steeply down there, so the fundamental can be 25 dB below its own harmonics and a naive peak pick reports 2&times; or 4&times; the real speed. The detector searches from 300 rpm upward regardless of your expected range, then walks back down to the true fundamental. Readings under your minimum are shown and marked, not forced into range.</p>
   </div>
   <div>
     <h3>Getting a clean reading</h3>
-    <p>Stand 2&ndash;5 m off, downwind, with the mic unobstructed. Watch the level meter &mdash; clipping invents harmonics and the reading will drift high. If the lock chip says <em>weak</em>, check the marked peak on the spectrum before believing the number.</p>
+    <p>Stand 2&ndash;5 m off, downwind, with the mic unobstructed. Watch the level meter &mdash; clipping invents harmonics and the reading drifts high. The faint ticks along the spectrum baseline mark where harmonics of the current lock should fall: if they sit on real peaks, the lock is right.</p>
   </div>
   <div class="caution">
     <h3>Not an airworthiness instrument</h3>
@@ -304,6 +305,8 @@ figcaption strong{font-size:13.5px;font-weight:600}
 
 /* ============================ constants ============================ */
 var FFT = 32768, HARM = 5, CLAMP_DB = -145;
+var RPM_FLOOR = 300;    /* lowest head speed the detector will look for */
+var MAX_SLEW  = 4500;   /* rpm per second - a rotor cannot change faster */
 var reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 var SHARE_URL = location.href;
 var framed = (function(){ try{ return window.self !== window.top; }catch(e){ return true; } })();
@@ -318,7 +321,7 @@ var S = {
   mode:"demo", blades:2, rpmMin:1000, rpmMax:6000,
   sampleRate:48000, binHz:48000/FFT,
   spec:null, rpm:null, freq:null, conf:0, locked:false,
-  raw:[], hist:[], peak:0,
+  raw:[], hist:[], peak:0, pending:[], lastT:0, inRange:true, corrected:false,
   level:-Infinity, clipped:false,
   demoRpm:2137, demoPhase:0
 };
@@ -338,10 +341,59 @@ var fmt = function(n){ return Math.round(n).toLocaleString("en-US").replace(/,/g
 /* ============================ detector ============================ */
 /* Harmonic product spectrum over log magnitudes, then parabolic refinement
    on the raw spectrum. Returns null when nothing in band stands out. */
+/* Noise floor near a bin, ignoring the peak itself. */
+function localMedian(dB, k, half){
+  var n = dB.length, a = [], i, v;
+  for(i = Math.max(1, k-half); i <= Math.min(n-1, k+half); i++){
+    if(Math.abs(i-k) <= 2) continue;
+    v = dB[i];
+    a.push((isFinite(v) && v > CLAMP_DB) ? v : CLAMP_DB);
+  }
+  if(!a.length) return CLAMP_DB;
+  a.sort(function(x,y){ return x-y; });
+  return a[a.length>>1];
+}
+
+/* Is there a real spectral peak at this frequency, or just noise? */
+function partialPresent(dB, binHz, f, margin){
+  var n = dB.length, k = Math.round(f/binHz), i, pk;
+  if(k < 2 || k > n-3) return false;
+  pk = k;
+  for(i = k-1; i <= k+1; i++) if(dB[i] > dB[pk]) pk = i;   /* tolerate a bin of drift */
+  return (dB[pk] - localMedian(dB, pk, 24)) >= margin;
+}
+
+/* A handset mic and a small speaker both roll off hard below ~100 Hz, so the
+   true fundamental can be 25 dB down while its harmonics are loud. HPS then
+   locks onto a harmonic and reports an integer multiple of the real rpm.
+   Walk back down: f/d is the real fundamental only when the partials it adds -
+   the ones f cannot account for - are actually present. For d=2 those are the
+   odd multiples 1,3,5 of f/2; two thirds must be there, so one attenuated
+   member cannot sink the test. */
+var NEW_PARTIALS = { 2:[1,3,5], 3:[1,2,4,5] };
+function descend(dB, binHz, f, fFloor){
+  for(var iter = 0; iter < 5; iter++){
+    var moved = false;
+    for(var d = 2; d <= 3; d++){
+      var fs = f/d;
+      if(fs < fFloor) continue;
+      var ms = NEW_PARTIALS[d], hit = 0, i;
+      for(i = 0; i < ms.length; i++) if(partialPresent(dB, binHz, fs*ms[i], 7)) hit++;
+      if(hit*3 >= ms.length*2){ f = fs; moved = true; break; }
+    }
+    if(!moved) break;
+  }
+  return f;
+}
+
 function detect(dB, binHz, blades, rpmMin, rpmMax){
   var n = dB.length;
-  var fMin = rpmMin*blades/60, fMax = rpmMax*blades/60;
-  var kMin = Math.max(2, Math.floor(fMin/binHz));
+  /* Search floor is fixed low, NOT the user's minimum: a rotor spooling up
+     passes below any sensible minimum, and clamping the search there is what
+     makes the reading jump to a harmonic instead of admitting it is low. */
+  var fFloor = Math.max(8, RPM_FLOOR*blades/60);
+  var fMax = rpmMax*blades/60;
+  var kMin = Math.max(3, Math.floor(fFloor/binHz));
   var kMax = Math.min(Math.floor((n-1)/HARM), Math.ceil(fMax/binHz));
   if(kMax <= kMin) return null;
 
@@ -361,6 +413,15 @@ function detect(dB, binHz, blades, rpmMin, rpmMax){
   var pk = bestK;
   for(k = Math.max(1, bestK-2); k <= Math.min(n-2, bestK+2); k++) if(dB[k] > dB[pk]) pk = k;
 
+  /* correct a harmonic lock before measuring */
+  var fRaw = pk*binHz;
+  var fFund = descend(dB, binHz, fRaw, fFloor);
+  var corrected = fFund < fRaw*0.95;
+  if(corrected){
+    pk = Math.max(2, Math.min(n-3, Math.round(fFund/binHz)));
+    for(k = Math.max(1, pk-2); k <= Math.min(n-2, pk+2); k++) if(dB[k] > dB[pk]) pk = k;
+  }
+
   /* parabolic interpolation on log magnitude */
   var a = dB[pk-1], b = dB[pk], c = dB[pk+1], d = 0, den = a - 2*b + c;
   if(isFinite(den) && den < -1e-9){ d = 0.5*(a-c)/den; if(!(d > -0.5 && d < 0.5)) d = 0; }
@@ -370,7 +431,7 @@ function detect(dB, binHz, blades, rpmMin, rpmMax){
   var conf = Math.max(0, Math.min(1, (best - med)/80));
 
   var freq = (pk + d)*binHz;
-  return { freq:freq, rpm:60*freq/blades, conf:conf, bin:pk };
+  return { freq:freq, rpm:60*freq/blades, conf:conf, bin:pk, corrected:corrected };
 }
 
 function median(arr){
@@ -412,16 +473,38 @@ function frame(dB){
   var now = performance.now();
 
   if(r && r.conf > 0.22){
-    S.raw.push(r.rpm); if(S.raw.length > 5) S.raw.shift();
-    S.rpm = median(S.raw);
-    S.freq = S.rpm*S.blades/60;
+    var cand = r.rpm, accept = true;
+
+    /* A head cannot slew thousands of rpm between frames. A candidate that
+       claims it is a harmonic slip or a transient, not a reading - unless it
+       repeats, which is how a genuine fast change or a re-lock gets through. */
+    if(S.rpm != null){
+      var dt = Math.max(0.05, (now - S.lastT)/1000);
+      if(Math.abs(cand - S.rpm) > Math.max(200, MAX_SLEW*dt)){
+        S.pending.push(cand);
+        if(S.pending.length >= 3){
+          var lo = Math.min.apply(null, S.pending), hi = Math.max.apply(null, S.pending);
+          if(hi - lo <= 0.12*hi){ cand = median(S.pending); S.pending = []; S.raw = []; }
+          else { S.pending.shift(); accept = false; }
+        } else accept = false;
+      } else S.pending = [];
+    }
+
+    if(accept){
+      S.raw.push(cand); if(S.raw.length > 5) S.raw.shift();
+      S.rpm = median(S.raw);
+      S.freq = S.rpm*S.blades/60;
+      S.lastT = now;
+      S.inRange = S.rpm >= S.rpmMin && S.rpm <= S.rpmMax;
+      S.corrected = !!r.corrected;
+      if(S.inRange && S.rpm > S.peak) S.peak = S.rpm;   /* out-of-range never sets peak hold */
+      S.hist.push({ t:now, rpm:S.rpm, ok:S.inRange });
+    }
     S.conf = r.conf; S.locked = true;
-    if(S.rpm > S.peak) S.peak = S.rpm;
-    S.hist.push({ t:now, rpm:S.rpm });
   } else {
     S.conf = r ? r.conf : 0;
     S.locked = false;
-    S.raw.length = 0;
+    S.raw.length = 0; S.pending.length = 0;
   }
   while(S.hist.length && now - S.hist[0].t > 60000) S.hist.shift();
   paint();
@@ -430,9 +513,13 @@ function frame(dB){
 /* ============================ render: readout ============================ */
 function paint(){
   elRpm.textContent = S.rpm == null ? "—" : fmt(S.rpm);
-  elBig.className = "big" + (S.locked ? "" : " stale");
+  elBig.className = "big" + (S.locked ? "" : " stale") + (S.rpm != null && !S.inRange ? " oor" : "");
 
-  var st = S.conf >= 0.62 ? ["good","Strong lock"] : S.conf >= 0.34 ? ["weak","Weak lock"] : ["none", S.rpm==null?"Listening":"Holding"];
+  var st;
+  if(S.rpm != null && !S.inRange)        st = ["weak", S.rpm < S.rpmMin ? "Below set range" : "Above set range"];
+  else if(S.conf >= 0.62)                st = ["good", S.corrected ? "Locked \u00b7 harmonic corrected" : "Strong lock"];
+  else if(S.conf >= 0.34)                st = ["weak", "Weak lock"];
+  else                                   st = ["none", S.rpm == null ? "Listening" : "Holding"];
   elLock.dataset.s = st[0]; elLock.textContent = st[1];
 
   elFhz.innerHTML = (S.freq == null ? "—" : S.freq.toFixed(1)) + " <small>Hz</small>";
@@ -525,6 +612,14 @@ function drawSpectrum(){
   /* detected peak marker + direct label */
   if(S.freq != null && S.freq <= xMax){
     var px = X(S.freq);
+    /* harmonic comb: if the lock is right, these land on real peaks */
+    g.strokeStyle = accent; g.globalAlpha = .38; g.lineWidth = 1;
+    for(var hm = 2; hm <= 8; hm++){
+      var hx = X(S.freq*hm);
+      if(hx > W - mr) break;
+      g.beginPath(); g.moveTo(hx, mt + ph - 12); g.lineTo(hx, mt + ph); g.stroke();
+    }
+    g.globalAlpha = 1;
     g.setLineDash([3,3]); g.strokeStyle = accent; g.lineWidth = 1.5;
     g.beginPath(); g.moveTo(px, mt); g.lineTo(px, mt + ph); g.stroke(); g.setLineDash([]);
     var lbl = S.freq.toFixed(1) + " Hz · " + fmt(S.rpm) + " rpm";
@@ -833,15 +928,15 @@ elScale.children[1].textContent = fmt(S.rpmMax);
 elTestLab.textContent = fmt(S.demoRpm) + " rpm";
 startDemo();
 
+/* exposed for offline verification */
+window.__tach = { detect:detect, synth:synth, descend:descend };
+
 })();
 </script>
 
 <script>
-/* Offline support: the flight line rarely has signal. */
 if("serviceWorker" in navigator){
-  addEventListener("load", function(){
-    navigator.serviceWorker.register("./sw.js").catch(function(){ /* http:// or private mode - app still runs */ });
-  });
+  addEventListener("load", function(){ navigator.serviceWorker.register("./sw.js").catch(function(){}); });
 }
 </script>
 </body>
