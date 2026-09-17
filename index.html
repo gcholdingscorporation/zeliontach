@@ -1,0 +1,848 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#E9ECEF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1318" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Acoustic tachometer for RC helicopter head speed, 1000-6000 rpm, read from the phone microphone.">
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Zelion Tach">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<style>
+html{color-scheme:light dark}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;font:14px system-ui,sans-serif}
+img{max-width:100%}
+[hidden]{display:none!important}
+</style>
+<title>Zelion Tach</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Saira+Condensed:wght@500;600;700&display=swap">
+<style>
+:root{
+  --bg:#E9ECEF; --surface:#FFFFFF; --surface-2:#F2F5F7; --sunk:#E2E7EB;
+  --ink:#141A21; --ink-2:#4A5764; --ink-3:#7C8895;
+  --line:#D3D9DF; --line-soft:#E4E9ED;
+  --accent:#B4541B; --accent-ink:#8E400F; --accent-soft:rgba(180,84,27,.13); --accent-faint:rgba(180,84,27,.07);
+  --good:#1C6E52; --warn:#8C6000; --crit:#A22E22;
+  --good-soft:rgba(28,110,82,.12); --warn-soft:rgba(140,96,0,.13); --crit-soft:rgba(162,46,34,.12);
+  --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --disp:"Saira Condensed","Saira",var(--sans);
+  --r:10px;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1318; --surface:#161D24; --surface-2:#1C252D; --sunk:#111820;
+    --ink:#E7ECF1; --ink-2:#9FADBA; --ink-3:#6E7C8A;
+    --line:#2A343D; --line-soft:#212B33;
+    --accent:#F0913F; --accent-ink:#F5A961; --accent-soft:rgba(240,145,63,.16); --accent-faint:rgba(240,145,63,.08);
+    --good:#4FC08D; --warn:#E0B24A; --crit:#E8705F;
+    --good-soft:rgba(79,192,141,.14); --warn-soft:rgba(224,178,74,.14); --crit-soft:rgba(232,112,95,.14);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1318; --surface:#161D24; --surface-2:#1C252D; --sunk:#111820;
+  --ink:#E7ECF1; --ink-2:#9FADBA; --ink-3:#6E7C8A;
+  --line:#2A343D; --line-soft:#212B33;
+  --accent:#F0913F; --accent-ink:#F5A961; --accent-soft:rgba(240,145,63,.16); --accent-faint:rgba(240,145,63,.08);
+  --good:#4FC08D; --warn:#E0B24A; --crit:#E8705F;
+  --good-soft:rgba(79,192,141,.14); --warn-soft:rgba(224,178,74,.14); --crit-soft:rgba(232,112,95,.14);
+}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:20px 40px;display:flex;flex-direction:column;gap:14px}
+h1,h2,h3{margin:0;text-wrap:balance}
+p{margin:0}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.tiny{font-size:11px}
+.lab{font-family:var(--mono);font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-3)}
+
+/* ---------- header ---------- */
+.top{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between}
+.brand{display:flex;gap:11px;align-items:center;min-width:0}
+.rotor{flex:none;width:34px;height:34px;color:var(--accent)}
+.rotor .hub{transform-origin:50% 50%;animation:spin 1.4s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.rotor .hub{animation:none}}
+.brand h1{font-family:var(--disp);font-size:26px;font-weight:700;letter-spacing:.005em;line-height:1.05}
+.brand .sub{font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:.02em}
+.srcline{display:flex;align-items:center;gap:10px}
+.pill{font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;padding:4px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent-ink);white-space:nowrap}
+.pill.live{background:var(--good-soft);color:var(--good)}
+.meter{width:96px;height:8px;border-radius:999px;background:var(--sunk);overflow:hidden;position:relative}
+.meter i{display:block;height:100%;width:0%;background:var(--good);transition:width .12s linear}
+.meter i.hot{background:var(--crit)}
+.meter::after{content:"";position:absolute;inset-block:0;left:88%;width:1px;background:var(--line)}
+
+/* ---------- panels ---------- */
+.app{display:grid;gap:14px;align-items:start}
+.app>*{min-width:0}
+@media(min-width:920px){
+  .app{grid-template-columns:352px minmax(0,1fr)}
+  #pRead{grid-column:1;grid-row:1}
+  #pCtrl{grid-column:1;grid-row:2}
+  #pSpec{grid-column:2;grid-row:1}
+  #pTrend{grid-column:2;grid-row:2}
+  #pVerify{grid-column:2;grid-row:3}
+}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px}
+
+/* ---------- readout ---------- */
+.readout{background:var(--surface);border-color:var(--line)}
+.rowlab{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.lock{font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;padding:3px 8px;border-radius:5px;background:var(--good-soft);color:var(--good);white-space:nowrap}
+.lock[data-s="weak"]{background:var(--warn-soft);color:var(--warn)}
+.lock[data-s="none"]{background:var(--crit-soft);color:var(--crit)}
+.big{display:flex;align-items:baseline;gap:8px;margin-top:4px;min-width:0}
+.big .n{font-family:var(--disp);font-weight:700;font-size:clamp(58px,15vw,98px);line-height:.9;letter-spacing:-.015em;font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap}
+.big.stale .n{color:var(--ink-3)}
+.big .unit{font-family:var(--mono);font-size:14px;color:var(--ink-3);letter-spacing:.06em}
+
+/* band gauge */
+.gauge{margin-top:14px}
+.track{position:relative;height:26px;border-radius:6px;background:var(--sunk);border:1px solid var(--line-soft);overflow:hidden}
+.track .fill{position:absolute;inset-block:0;left:0;width:0%;background:var(--accent-faint);border-right:2px solid var(--accent);transition:width .18s ease-out}
+.track .tick{position:absolute;inset-block:0;width:1px;background:var(--line)}
+.scale{display:flex;justify-content:space-between;margin-top:5px}
+.scale span{font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+
+.facts{display:grid;grid-template-columns:1fr 1fr;gap:1px;margin:14px 0 0;background:var(--line-soft);border:1px solid var(--line-soft);border-radius:8px;overflow:hidden}
+.facts>div{background:var(--surface);padding:8px 10px;display:flex;flex-direction:column;gap:2px}
+.facts dd{margin:0;font-family:var(--mono);font-size:15px;font-weight:500;font-variant-numeric:tabular-nums;color:var(--ink)}
+.facts dd small{font-size:11px;color:var(--ink-3);font-weight:400}
+
+/* ---------- verify ---------- */
+.verify{display:grid;gap:9px}
+.vhead{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.verdict{font-family:var(--mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;padding:3px 8px;border-radius:5px;background:var(--good-soft);color:var(--good)}
+.verdict[data-s="bad"]{background:var(--crit-soft);color:var(--crit)}
+.vgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.vgrid div{display:flex;flex-direction:column;gap:1px}
+.vgrid b{font-family:var(--mono);font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+.vnote{font-size:12px;color:var(--ink-2);line-height:1.45}
+
+/* ---------- controls ---------- */
+.controls{display:grid;gap:12px}
+.field{display:grid;gap:5px}
+.seg{display:flex;background:var(--sunk);border-radius:7px;padding:3px;gap:3px}
+.seg button{flex:1;appearance:none;border:0;background:transparent;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--ink-2);padding:6px 0;border-radius:5px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.09)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+input[type=number],select{width:100%;font-family:var(--mono);font-size:13px;padding:7px 8px;border:1px solid var(--line);border-radius:7px;background:var(--surface-2);color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.btn{appearance:none;border:1px solid var(--accent);background:var(--accent);color:#fff;font-family:var(--sans);font-weight:600;font-size:14px;padding:10px 14px;border-radius:8px;cursor:pointer;width:100%}
+.btn:hover{filter:brightness(1.07)}
+.btn.ghost{background:transparent;color:var(--ink-2);border-color:var(--line)}
+.btn.ghost:hover{background:var(--surface-2);filter:none}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.err{font-size:12.5px;color:var(--crit);background:var(--crit-soft);border-radius:7px;padding:9px 11px;line-height:1.5}
+.err a,.hint a{color:inherit;font-weight:600}
+.err code{font-family:var(--mono);font-size:11px;word-break:break-all;display:inline-block}
+.hint{font-size:12px;color:var(--ink-2);line-height:1.5;background:var(--surface-2);border:1px solid var(--line);border-radius:7px;padding:9px 11px}
+.hint b{color:var(--ink)}
+
+/* ---------- charts ---------- */
+figure.chart{margin:0}
+figcaption{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:9px;flex-wrap:wrap}
+figcaption strong{font-size:13.5px;font-weight:600}
+.cwrap{position:relative;width:100%}
+.cwrap canvas{display:block;width:100%;max-width:100%;touch-action:pan-y}
+.tip{position:absolute;pointer-events:none;opacity:0;transform:translate(-50%,-115%);background:var(--ink);color:var(--bg);font-family:var(--mono);font-size:11px;line-height:1.45;padding:5px 8px;border-radius:6px;white-space:nowrap;transition:opacity .09s;z-index:3}
+.tip.on{opacity:1}
+
+/* ---------- notes ---------- */
+.notes{border-top:1px solid var(--line);padding-top:16px;display:grid;gap:12px}
+@media(min-width:760px){.notes{grid-template-columns:repeat(3,1fr);gap:22px}}
+.notes h3{font-family:var(--mono);font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-3);margin-bottom:5px}
+.notes p{font-size:12.5px;color:var(--ink-2);line-height:1.55}
+.notes code{font-family:var(--mono);font-size:11.5px;background:var(--surface-2);padding:1px 4px;border-radius:4px;color:var(--ink)}
+.notes .caution{border-left:2px solid var(--crit);padding-left:10px}
+.notes .caution h3{color:var(--crit)}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div class="brand">
+    <svg class="rotor" viewBox="0 0 40 40" aria-hidden="true">
+      <g class="hub">
+        <rect x="4" y="18.4" width="32" height="3.2" rx="1.6" fill="currentColor"/>
+        <circle cx="20" cy="20" r="3.4" fill="currentColor"/>
+      </g>
+      <circle cx="20" cy="20" r="15" fill="none" stroke="currentColor" stroke-opacity=".25" stroke-width="1.2"/>
+    </svg>
+    <div>
+      <h1>Zelion Tach</h1>
+      <p class="sub">Acoustic head-speed meter &middot; 1 000&ndash;6 000 rpm</p>
+    </div>
+  </div>
+  <div class="srcline">
+    <span class="pill" id="modePill">Demo signal</span>
+    <div class="meter" title="Input level"><i id="meterFill"></i></div>
+    <span class="mono tiny" id="meterVal" style="color:var(--ink-3);min-width:56px">&minus;&infin; dBFS</span>
+  </div>
+</header>
+
+<main class="app">
+
+    <!-- READOUT -->
+    <section class="panel readout" id="pRead">
+      <div class="rowlab">
+        <span class="lab">Head speed</span>
+        <span class="lock" id="lockChip" data-s="good">Strong lock</span>
+      </div>
+      <div class="big" id="bigWrap"><span class="n" id="rpmVal">2135</span><span class="unit">rpm</span></div>
+
+      <div class="gauge">
+        <div class="track" id="track"><div class="fill" id="trackFill"></div></div>
+        <div class="scale" id="scale"><span>1 000</span><span>6 000</span></div>
+      </div>
+
+      <dl class="facts">
+        <div><dt class="lab">Blade pass</dt><dd id="fHz">71.2 <small>Hz</small></dd></div>
+        <div><dt class="lab">Blades</dt><dd id="fBlades">2</dd></div>
+        <div><dt class="lab">Peak hold</dt><dd id="fPeak">2 147</dd></div>
+        <div><dt class="lab">Bin width</dt><dd id="fRes">44 <small>rpm</small></dd></div>
+      </dl>
+    </section>
+
+    <!-- VERIFY / SIGNAL -->
+    <section class="panel verify" id="pVerify">
+      <div class="vhead">
+        <span class="lab" id="vTitle">Self-test &middot; known signal</span>
+        <span class="verdict" id="vChip">Pass</span>
+      </div>
+      <div class="vgrid" id="vGrid">
+        <div><span class="lab">Injected</span><b id="vIn">2 137</b></div>
+        <div><span class="lab">Measured</span><b id="vOut">2 135</b></div>
+        <div><span class="lab">Error</span><b id="vErr">&minus;2</b></div>
+      </div>
+      <div class="field" id="vSliderField">
+        <label class="lab" for="testRpm">Test tone &middot; <span class="mono" id="testRpmLab">2 137 rpm</span></label>
+        <input type="range" id="testRpm" min="1000" max="6000" step="1" value="2137">
+      </div>
+      <p class="vnote" id="vNote">A synthetic 2-blade rotor signature is fed straight into the detector &mdash; harmonics, a pink noise floor, and the low-frequency rolloff a phone mic actually has. If measured tracks injected, the maths is sound. Then switch to the microphone.</p>
+    </section>
+
+    <!-- CONTROLS -->
+    <section class="panel controls" id="pCtrl">
+      <div class="field">
+        <span class="lab">Source</span>
+        <div class="seg" role="group" aria-label="Signal source">
+          <button id="mDemo" aria-pressed="true">Self-test</button>
+          <button id="mMic" aria-pressed="false">Microphone</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="lab">Blade count</span>
+        <div class="seg" role="group" aria-label="Blade count">
+          <button class="bl" data-b="2" aria-pressed="true">2</button>
+          <button class="bl" data-b="3" aria-pressed="false">3</button>
+          <button class="bl" data-b="4" aria-pressed="false">4</button>
+          <button class="bl" data-b="5" aria-pressed="false">5</button>
+        </div>
+      </div>
+      <div class="two">
+        <div class="field"><label class="lab" for="rMin">Min rpm</label><input type="number" id="rMin" value="1000" min="200" max="20000" step="50"></div>
+        <div class="field"><label class="lab" for="rMax">Max rpm</label><input type="number" id="rMax" value="6000" min="300" max="30000" step="50"></div>
+      </div>
+      <button class="btn" id="startBtn">Start microphone</button>
+      <button class="btn ghost" id="resetBtn">Reset peak hold &amp; trend</button>
+      <p class="hint" id="frameHint" hidden></p>
+      <div class="err" id="errBox" hidden></div>
+    </section>
+
+    <!-- SPECTRUM -->
+    <figure class="panel chart" id="pSpec">
+      <figcaption>
+        <strong>Acoustic spectrum</strong>
+        <span class="mono tiny" style="color:var(--ink-3)">Shaded = search band &middot; drag across to probe</span>
+      </figcaption>
+      <div class="cwrap"><canvas id="specCv"></canvas><div class="tip" id="specTip"></div></div>
+    </figure>
+
+    <!-- TREND -->
+    <figure class="panel chart" id="pTrend">
+      <figcaption>
+        <strong>Head speed, last 60 seconds</strong>
+        <span class="mono tiny" style="color:var(--ink-3)" id="trendMeta">&nbsp;</span>
+      </figcaption>
+      <div class="cwrap"><canvas id="trendCv"></canvas><div class="tip" id="trendTip"></div></div>
+    </figure>
+</main>
+
+<footer class="notes">
+  <div>
+    <h3>How it reads rpm</h3>
+    <p>A rotor radiates a tone at its blade-pass frequency: <code>rpm &times; blades &div; 60</code>. Two blades at 1 000&ndash;6 000 rpm puts that at 33&ndash;200 Hz. A 32 768-point FFT plus a harmonic product spectrum picks the true fundamental, and parabolic interpolation refines it between bins.</p>
+  </div>
+  <div>
+    <h3>Getting a clean reading</h3>
+    <p>Stand 2&ndash;5 m off, downwind, with the mic unobstructed. Watch the level meter &mdash; clipping invents harmonics and the reading will drift high. If the lock chip says <em>weak</em>, check the marked peak on the spectrum before believing the number.</p>
+  </div>
+  <div class="caution">
+    <h3>Not an airworthiness instrument</h3>
+    <p>This is a tuning aid for RC models. It is uncertified, it can be fooled by a strong harmonic, and it must not be used to decide whether any rotor system is safe to fly. Verify against an optical tach before you trust it for anything that matters.</p>
+  </div>
+</footer>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============================ constants ============================ */
+var FFT = 32768, HARM = 5, CLAMP_DB = -145;
+var reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+var SHARE_URL = location.href;
+var framed = (function(){ try{ return window.self !== window.top; }catch(e){ return true; } })();
+/* Permissions-Policy check: a framed page only gets a mic if the host frame granted it. */
+function micAllowedByPolicy(){
+  try{ if(document.featurePolicy && document.featurePolicy.allowsFeature) return document.featurePolicy.allowsFeature("microphone"); }catch(e){}
+  return null;   /* unknown - never block on a guess */
+}
+
+/* ============================ state ============================ */
+var S = {
+  mode:"demo", blades:2, rpmMin:1000, rpmMax:6000,
+  sampleRate:48000, binHz:48000/FFT,
+  spec:null, rpm:null, freq:null, conf:0, locked:false,
+  raw:[], hist:[], peak:0,
+  level:-Infinity, clipped:false,
+  demoRpm:2137, demoPhase:0
+};
+var audio = { ctx:null, stream:null, analyser:null, src:null, dbBuf:null, timeBuf:null, raf:0, wake:null };
+
+/* ============================ dom ============================ */
+var $ = function(id){ return document.getElementById(id); };
+var elRpm=$("rpmVal"), elBig=$("bigWrap"), elLock=$("lockChip"), elFhz=$("fHz"), elBlades=$("fBlades"),
+    elPeak=$("fPeak"), elRes=$("fRes"), elFill=$("trackFill"), elScale=$("scale"), elTrack=$("track"),
+    elPill=$("modePill"), elMeter=$("meterFill"), elMeterVal=$("meterVal"),
+    elVTitle=$("vTitle"), elVChip=$("vChip"), elVGrid=$("vGrid"), elVIn=$("vIn"), elVOut=$("vOut"),
+    elVErr=$("vErr"), elVNote=$("vNote"), elVSlider=$("vSliderField"), elTestRpm=$("testRpm"),
+    elTestLab=$("testRpmLab"), elStart=$("startBtn"), elErr=$("errBox"), elTrendMeta=$("trendMeta");
+
+var fmt = function(n){ return Math.round(n).toLocaleString("en-US").replace(/,/g,"\u202F"); };
+
+/* ============================ detector ============================ */
+/* Harmonic product spectrum over log magnitudes, then parabolic refinement
+   on the raw spectrum. Returns null when nothing in band stands out. */
+function detect(dB, binHz, blades, rpmMin, rpmMax){
+  var n = dB.length;
+  var fMin = rpmMin*blades/60, fMax = rpmMax*blades/60;
+  var kMin = Math.max(2, Math.floor(fMin/binHz));
+  var kMax = Math.min(Math.floor((n-1)/HARM), Math.ceil(fMax/binHz));
+  if(kMax <= kMin) return null;
+
+  var vals = [], best = -Infinity, bestK = -1, k, r, s, v;
+  for(k = kMin; k <= kMax; k++){
+    s = 0;
+    for(r = 1; r <= HARM; r++){
+      v = dB[k*r];
+      s += (isFinite(v) && v > CLAMP_DB) ? v : CLAMP_DB;
+    }
+    vals.push(s);
+    if(s > best){ best = s; bestK = k; }
+  }
+  if(bestK < 0) return null;
+
+  /* snap to the nearest true ridge in the raw spectrum (HPS can sit a bin off) */
+  var pk = bestK;
+  for(k = Math.max(1, bestK-2); k <= Math.min(n-2, bestK+2); k++) if(dB[k] > dB[pk]) pk = k;
+
+  /* parabolic interpolation on log magnitude */
+  var a = dB[pk-1], b = dB[pk], c = dB[pk+1], d = 0, den = a - 2*b + c;
+  if(isFinite(den) && den < -1e-9){ d = 0.5*(a-c)/den; if(!(d > -0.5 && d < 0.5)) d = 0; }
+
+  var sorted = vals.slice().sort(function(x,y){ return x-y; });
+  var med = sorted[sorted.length>>1];
+  var conf = Math.max(0, Math.min(1, (best - med)/80));
+
+  var freq = (pk + d)*binHz;
+  return { freq:freq, rpm:60*freq/blades, conf:conf, bin:pk };
+}
+
+function median(arr){
+  var s = arr.slice().sort(function(a,b){ return a-b; });
+  return s[s.length>>1];
+}
+
+/* ============================ synthetic rotor signature ============================ */
+/* Real algorithm, known input: the self-test path builds the spectrum a phone mic
+   would see for a given rpm, including the sub-100 Hz rolloff. */
+var noiseSeed = 12345;
+function rnd(){ noiseSeed = (noiseSeed*1103515245 + 12345) & 0x7fffffff; return noiseSeed/0x7fffffff; }
+
+function synth(rpm, blades, binHz, bins){
+  var dB = new Float32Array(bins), i, f, h;
+  for(i = 0; i < bins; i++){
+    f = i*binHz;
+    dB[i] = -94 - 9*Math.log10(1 + f/40) + (rnd()-0.5)*7;
+  }
+  var f0 = rpm*blades/60;
+  for(h = 1; h <= 14; h++){
+    f = f0*h;
+    if(f/binHz > bins-3) break;
+    var roll = f < 110 ? -20*Math.log10(110/f) : 0;      /* handset mic low-end rolloff */
+    var amp  = -24 - 13*Math.log2(h) + roll;
+    var kc = f/binHz;
+    for(var k = Math.max(1, Math.floor(kc)-3); k <= Math.floor(kc)+3; k++){
+      var g = amp - 11*(k-kc)*(k-kc);                     /* window leakage skirt */
+      dB[k] = 10*Math.log10(Math.pow(10, dB[k]/10) + Math.pow(10, g/10));
+    }
+  }
+  return dB;
+}
+
+/* ============================ ingest one frame ============================ */
+function frame(dB){
+  S.spec = dB;
+  var r = detect(dB, S.binHz, S.blades, S.rpmMin, S.rpmMax);
+  var now = performance.now();
+
+  if(r && r.conf > 0.22){
+    S.raw.push(r.rpm); if(S.raw.length > 5) S.raw.shift();
+    S.rpm = median(S.raw);
+    S.freq = S.rpm*S.blades/60;
+    S.conf = r.conf; S.locked = true;
+    if(S.rpm > S.peak) S.peak = S.rpm;
+    S.hist.push({ t:now, rpm:S.rpm });
+  } else {
+    S.conf = r ? r.conf : 0;
+    S.locked = false;
+    S.raw.length = 0;
+  }
+  while(S.hist.length && now - S.hist[0].t > 60000) S.hist.shift();
+  paint();
+}
+
+/* ============================ render: readout ============================ */
+function paint(){
+  elRpm.textContent = S.rpm == null ? "—" : fmt(S.rpm);
+  elBig.className = "big" + (S.locked ? "" : " stale");
+
+  var st = S.conf >= 0.62 ? ["good","Strong lock"] : S.conf >= 0.34 ? ["weak","Weak lock"] : ["none", S.rpm==null?"Listening":"Holding"];
+  elLock.dataset.s = st[0]; elLock.textContent = st[1];
+
+  elFhz.innerHTML = (S.freq == null ? "—" : S.freq.toFixed(1)) + " <small>Hz</small>";
+  elBlades.textContent = S.blades;
+  elPeak.textContent = S.peak ? fmt(S.peak) : "—";
+  elRes.innerHTML = Math.round(60*S.binHz/S.blades) + " <small>rpm</small>";
+
+  var pct = S.rpm == null ? 0 : (S.rpm - S.rpmMin)/(S.rpmMax - S.rpmMin);
+  elFill.style.width = (Math.max(0, Math.min(1, pct))*100).toFixed(2) + "%";
+
+  if(S.mode === "demo"){
+    var err = S.rpm == null ? null : S.rpm - S.demoRpm;
+    elVIn.textContent = fmt(S.demoRpm);
+    elVOut.textContent = S.rpm == null ? "—" : fmt(S.rpm);
+    elVErr.textContent = err == null ? "—" : (err >= 0 ? "+" : "−") + fmt(Math.abs(err));
+    var ok = err != null && Math.abs(err) <= Math.max(15, S.demoRpm*0.01);
+    elVChip.dataset.s = ok ? "" : "bad";
+    elVChip.textContent = ok ? "Pass" : "Off";
+  } else {
+    elVIn.textContent = isFinite(S.level) ? S.level.toFixed(1) : "−∞";
+    elVOut.textContent = S.clipped ? "Clipping" : "Clean";
+    elVErr.textContent = (S.sampleRate/1000).toFixed(1) + "k";
+    elVChip.dataset.s = S.clipped ? "bad" : "";
+    elVChip.textContent = S.clipped ? "Reduce level" : "Headroom ok";
+  }
+
+  drawSpectrum(); drawTrend();
+}
+
+/* ============================ canvas helpers ============================ */
+function wide(){ return window.innerWidth >= 920; }
+function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function fit(cv, h){
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  var w = cv.parentNode.clientWidth || 300;
+  cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
+  cv.style.height = h + "px";
+  var g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  return { g:g, w:w, h:h };
+}
+
+/* ============================ render: spectrum ============================ */
+var specHover = null;
+function drawSpectrum(){
+  var cv = $("specCv"); if(!cv.parentNode.clientWidth) return;
+  var P = fit(cv, wide() ? 236 : 196), g = P.g, W = P.w, H = P.h;
+  var ml = 6, mr = 6, mt = 8, mb = 22;
+  var pw = W - ml - mr, ph = H - mt - mb;
+  var ink3 = css("--ink-3"), line = css("--line-soft"), accent = css("--accent"), surface = css("--surface");
+
+  var fMin = S.rpmMin*S.blades/60, fMax = S.rpmMax*S.blades/60;
+  var xMax = Math.max(120, fMax*1.45);
+  var X = function(f){ return ml + (f/xMax)*pw; };
+
+  if(!S.spec){ return; }
+  var bins = Math.min(S.spec.length - 1, Math.ceil(xMax/S.binHz));
+  var lo = 1e9, hi = -1e9, i, v;
+  for(i = 1; i <= bins; i++){ v = S.spec[i]; if(!isFinite(v)) continue; if(v < lo) lo = v; if(v > hi) hi = v; }
+  if(!isFinite(lo) || hi <= lo){ lo = -110; hi = -20; }
+  lo = Math.max(lo, hi - 75); hi = hi + 4;
+  var Y = function(d){ return mt + ph - ((Math.max(lo, Math.min(hi, d)) - lo)/(hi - lo))*ph; };
+
+  /* search band */
+  g.fillStyle = css("--accent-faint");
+  g.fillRect(X(fMin), mt, X(fMax) - X(fMin), ph);
+
+  /* grid + hz axis */
+  var step = xMax > 360 ? 100 : xMax > 180 ? 50 : 25;
+  g.strokeStyle = line; g.lineWidth = 1;
+  g.fillStyle = ink3; g.font = '10px ' + (css("--mono") || "monospace"); g.textAlign = "center";
+  g.textAlign = "right"; g.fillText("Hz", W - mr, H - 7); g.textAlign = "center";
+  for(var f = 0; f <= xMax; f += step){
+    var x = Math.round(X(f)) + 0.5;
+    g.beginPath(); g.moveTo(x, mt); g.lineTo(x, mt + ph); g.stroke();
+    g.fillText(String(f), x, H - 7);
+  }
+
+  /* spectrum fill + line */
+  g.beginPath(); g.moveTo(X(S.binHz), mt + ph);
+  for(i = 1; i <= bins; i++) g.lineTo(X(i*S.binHz), Y(S.spec[i]));
+  g.lineTo(X(bins*S.binHz), mt + ph); g.closePath();
+  g.fillStyle = css("--accent-soft"); g.fill();
+
+  g.beginPath();
+  for(i = 1; i <= bins; i++){ var xx = X(i*S.binHz), yy = Y(S.spec[i]); i === 1 ? g.moveTo(xx, yy) : g.lineTo(xx, yy); }
+  g.strokeStyle = accent; g.lineWidth = 1.4; g.lineJoin = "round"; g.stroke();
+
+  /* detected peak marker + direct label */
+  if(S.freq != null && S.freq <= xMax){
+    var px = X(S.freq);
+    g.setLineDash([3,3]); g.strokeStyle = accent; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(px, mt); g.lineTo(px, mt + ph); g.stroke(); g.setLineDash([]);
+    var lbl = S.freq.toFixed(1) + " Hz · " + fmt(S.rpm) + " rpm";
+    g.font = '600 11px ' + (css("--mono") || "monospace");
+    var tw = g.measureText(lbl).width, bw = tw + 12;
+    var bx = px + 9;                                   /* sit beside the marker, never on it */
+    if(bx + bw > W - mr) bx = px - 9 - bw;
+    bx = Math.max(ml, bx);
+    g.fillStyle = accent; g.beginPath();
+    (g.roundRect ? g.roundRect(bx, mt, bw, 18, 4) : g.rect(bx, mt, bw, 18)); g.fill();
+    g.fillStyle = surface; g.textAlign = "left"; g.fillText(lbl, bx + 6, mt + 13);
+    g.beginPath(); g.arc(px, Y(S.spec[detectBin()]), 3.5, 0, 6.2832);
+    g.fillStyle = accent; g.fill(); g.strokeStyle = surface; g.lineWidth = 2; g.stroke();
+  }
+
+  /* hover probe */
+  var tip = $("specTip");
+  if(specHover != null && specHover >= ml && specHover <= W - mr){
+    var hf = (specHover - ml)/pw*xMax, hk = Math.max(1, Math.round(hf/S.binHz));
+    g.strokeStyle = ink3; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(specHover, mt); g.lineTo(specHover, mt + ph); g.stroke();
+    tip.className = "tip on";
+    tip.style.left = specHover + "px"; tip.style.top = mt + 4 + "px";
+    tip.textContent = hf.toFixed(1) + " Hz → " + fmt(60*hf/S.blades) + " rpm";
+  } else { tip.className = "tip"; }
+}
+function detectBin(){ return Math.max(1, Math.min((S.spec?S.spec.length-1:1), Math.round((S.freq||0)/S.binHz))); }
+
+/* ============================ render: trend ============================ */
+var trendHover = null;
+function drawTrend(){
+  var cv = $("trendCv"); if(!cv.parentNode.clientWidth) return;
+  var P = fit(cv, wide() ? 268 : 168), g = P.g, W = P.w, H = P.h;
+  var ml = 46, mr = 10, mt = 10, mb = 20;
+  var pw = W - ml - mr, ph = H - mt - mb;
+  var ink3 = css("--ink-3"), line = css("--line-soft"), accent = css("--accent"), surface = css("--surface");
+  g.font = '10px ' + (css("--mono") || "monospace");
+
+  var h = S.hist;
+  if(h.length < 2){
+    g.fillStyle = ink3; g.textAlign = "center";
+    g.fillText("Waiting for a lock…", W/2, H/2);
+    elTrendMeta.textContent = " "; $("trendTip").className = "tip"; return;
+  }
+
+  var now = performance.now(), t0 = now - 60000;
+  var lo = 1e9, hi = -1e9;
+  for(var i = 0; i < h.length; i++){ if(h[i].rpm < lo) lo = h[i].rpm; if(h[i].rpm > hi) hi = h[i].rpm; }
+  var span = Math.max(hi - lo, 180), pad = span*0.18;
+  var yLo = lo - pad, yHi = hi + pad;
+  var X = function(t){ return ml + Math.max(0, Math.min(1, (t - t0)/60000))*pw; };
+  var Y = function(r){ return mt + ph - ((r - yLo)/(yHi - yLo))*ph; };
+
+  /* grid: labelled at values the data actually reaches */
+  var rows = [hi, (hi + lo)/2, lo];
+  g.strokeStyle = line; g.lineWidth = 1; g.fillStyle = ink3; g.textAlign = "right";
+  for(var r = 0; r < rows.length; r++){
+    var y = Math.round(Y(rows[r])) + 0.5;
+    g.beginPath(); g.moveTo(ml, y); g.lineTo(ml + pw, y); g.stroke();
+    g.fillText(fmt(rows[r]), ml - 7, y + 3.5);
+  }
+  g.textAlign = "center";
+  g.fillText("−60 s", ml + 14, H - 6);
+  g.fillText("now", ml + pw - 10, H - 6);
+
+  /* area + line */
+  g.beginPath(); g.moveTo(X(h[0].t), mt + ph);
+  for(i = 0; i < h.length; i++) g.lineTo(X(h[i].t), Y(h[i].rpm));
+  g.lineTo(X(h[h.length-1].t), mt + ph); g.closePath();
+  g.fillStyle = css("--accent-soft"); g.fill();
+
+  g.beginPath();
+  for(i = 0; i < h.length; i++){ var xx = X(h[i].t), yy = Y(h[i].rpm); i ? g.lineTo(xx, yy) : g.moveTo(xx, yy); }
+  g.strokeStyle = accent; g.lineWidth = 2; g.lineJoin = "round"; g.lineCap = "round"; g.stroke();
+
+  /* emphasised endpoint */
+  var last = h[h.length-1];
+  g.beginPath(); g.arc(X(last.t), Y(last.rpm), 4.5, 0, 6.2832);
+  g.fillStyle = accent; g.fill(); g.strokeStyle = surface; g.lineWidth = 2; g.stroke();
+
+  elTrendMeta.textContent = "min " + fmt(lo) + " · max " + fmt(hi) + " · spread " + fmt(hi - lo) + " rpm";
+
+  /* hover */
+  var tip = $("trendTip");
+  if(trendHover != null && trendHover >= ml && trendHover <= ml + pw){
+    var ht = t0 + (trendHover - ml)/pw*60000, near = h[0];
+    for(i = 0; i < h.length; i++) if(Math.abs(h[i].t - ht) < Math.abs(near.t - ht)) near = h[i];
+    var nx = X(near.t), ny = Y(near.rpm);
+    g.strokeStyle = ink3; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(nx, mt); g.lineTo(nx, mt + ph); g.stroke();
+    g.beginPath(); g.arc(nx, ny, 5.5, 0, 6.2832); g.strokeStyle = accent; g.lineWidth = 2; g.stroke();
+    tip.className = "tip on"; tip.style.left = nx + "px"; tip.style.top = ny + "px";
+    tip.textContent = fmt(near.rpm) + " rpm · " + ((now - near.t)/1000).toFixed(1) + " s ago";
+  } else { tip.className = "tip"; }
+}
+
+/* ============================ demo driver ============================ */
+var demoTimer = 0;
+function demoTick(){
+  S.demoPhase += 0.1;
+  /* governed head speed with a little wander, as an ESC governor actually holds */
+  var jitter = Math.sin(S.demoPhase*0.9)*7 + Math.sin(S.demoPhase*2.7)*4;
+  var rpm = S.demoRpm + jitter;
+  frame(synth(rpm, S.blades, S.binHz, 2600));
+}
+function seedDemoHistory(){
+  var now = performance.now();
+  S.hist.length = 0;
+  for(var i = 0; i < 120; i++){
+    var t = now - (120 - i)*500;
+    var p = i/119;
+    var rpm = p < 0.28
+      ? S.rpmMin + (S.demoRpm - S.rpmMin)*(p/0.28)                    /* spool-up */
+      : S.demoRpm + Math.sin(i*0.34)*9 + Math.sin(i*0.11)*6;          /* governed */
+    S.hist.push({ t:t, rpm:rpm });
+    if(rpm > S.peak) S.peak = rpm;
+  }
+}
+function startDemo(){
+  stopMic();
+  S.mode = "demo";
+  elPill.textContent = "Demo signal"; elPill.className = "pill";
+  elVTitle.textContent = "Self-test · known signal";
+  elVGrid.children[0].firstChild.textContent = "Injected";
+  elVGrid.children[1].firstChild.textContent = "Measured";
+  elVGrid.children[2].firstChild.textContent = "Error";
+  elVSlider.hidden = false;
+  elVNote.textContent = "A synthetic 2-blade rotor signature is fed straight into the detector — harmonics, a pink noise floor, and the low-frequency rolloff a phone mic actually has. If measured tracks injected, the maths is sound. Then switch to the microphone.";
+  elStart.textContent = "Start microphone";
+  elMeter.style.width = "0%"; elMeterVal.innerHTML = "—";
+  S.raw.length = 0;
+  seedDemoHistory();
+  demoTick();
+  clearInterval(demoTimer);
+  if(!reduceMotion) demoTimer = setInterval(demoTick, 100);
+  setPressed($("mDemo"), true); setPressed($("mMic"), false);
+}
+
+/* ============================ microphone ============================ */
+function stopMic(){
+  clearInterval(demoTimer); demoTimer = 0;
+  if(audio.raf) cancelAnimationFrame(audio.raf), audio.raf = 0;
+  if(audio.stream){ audio.stream.getTracks().forEach(function(t){ t.stop(); }); audio.stream = null; }
+  if(audio.ctx){ audio.ctx.close().catch(function(){}); audio.ctx = null; }
+  if(audio.wake){ try{ audio.wake.release(); }catch(e){} audio.wake = null; }
+  audio.analyser = null;
+}
+
+function startMic(){
+  elErr.hidden = true;
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    return fail("This browser can’t open a microphone. Use Chrome or Safari over https.");
+  }
+  navigator.mediaDevices.getUserMedia({ audio:{
+      echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:1
+  }}).then(function(stream){
+    clearInterval(demoTimer); demoTimer = 0;
+    audio.stream = stream;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    audio.ctx = new AC();
+    if(audio.ctx.state === "suspended") audio.ctx.resume();
+    S.sampleRate = audio.ctx.sampleRate;
+    S.binHz = S.sampleRate/FFT;
+
+    var an = audio.ctx.createAnalyser();
+    an.fftSize = FFT; an.smoothingTimeConstant = 0;
+    audio.analyser = an;
+    audio.src = audio.ctx.createMediaStreamSource(stream);
+    audio.src.connect(an);
+    audio.dbBuf = new Float32Array(an.frequencyBinCount);
+    audio.timeBuf = new Float32Array(an.fftSize);
+
+    S.mode = "mic"; S.raw.length = 0; S.hist.length = 0; S.rpm = null; S.freq = null;
+    elPill.textContent = "Live · microphone"; elPill.className = "pill live";
+    elVTitle.textContent = "Input signal";
+    elVGrid.children[0].firstChild.textContent = "Level dBFS";
+    elVGrid.children[1].firstChild.textContent = "Headroom";
+    elVGrid.children[2].firstChild.textContent = "Sample rate";
+    elVSlider.hidden = true;
+    elVNote.textContent = "Echo cancellation, noise suppression and auto-gain are all switched off so the low-frequency rotor tone survives. Keep the level meter out of the red — clipping manufactures harmonics and pushes the reading high.";
+    elStart.textContent = "Stop microphone";
+    setPressed($("mDemo"), false); setPressed($("mMic"), true);
+
+    if(navigator.wakeLock) navigator.wakeLock.request("screen").then(function(w){ audio.wake = w; }).catch(function(){});
+    loop();
+  }).catch(function(e){
+    fail("Microphone blocked (" + (e && e.name ? e.name : "error") + "). Allow microphone access for this page in your browser’s site settings, then tap Start again. The page must be served over https.");
+    startDemo();
+  });
+}
+
+function fail(html){ elErr.innerHTML = html; elErr.hidden = false; }
+
+function micFailure(e){
+  var name = (e && e.name) ? e.name : "error";
+  var link = '<a href="' + SHARE_URL + '" target="_blank" rel="noopener">' + SHARE_URL + '</a>';
+  if(name === "NotAllowedError" && framed)
+    return "<b>This preview frame can\u2019t open a microphone.</b> Embedded pages are only given one if the page that frames them grants it, and permission settings won\u2019t change that. Open the tach in your browser instead \u2014 use the share control at the top of this panel, or go to " + link + " \u2014 then allow the mic when asked. If it is still blocked there, the artifact host doesn\u2019t grant microphone access at all and the page needs to run from your own https site.";
+  if(name === "NotAllowedError")
+    return "<b>Microphone permission denied.</b> Allow microphone access for this site in your browser\u2019s site settings, then tap Start microphone again.";
+  if(name === "NotFoundError" || name === "DevicesNotFoundError")
+    return "<b>No microphone found.</b> This device reports no audio input.";
+  if(name === "NotReadableError")
+    return "<b>The microphone is busy.</b> Another app or tab is holding it \u2014 close that, then tap Start microphone again.";
+  return "<b>Couldn\u2019t open the microphone</b> (" + name + "). The page must be served over https from a top-level window.";
+}
+
+var lastTick = 0;
+function loop(){
+  audio.raf = requestAnimationFrame(loop);
+  var t = performance.now();
+  if(t - lastTick < 70) return;
+  lastTick = t;
+
+  var an = audio.analyser; if(!an) return;
+  an.getFloatTimeDomainData(audio.timeBuf);
+  var pk = 0, sum = 0, n = 0;
+  for(var i = 0; i < audio.timeBuf.length; i += 4){
+    var v = Math.abs(audio.timeBuf[i]);
+    if(v > pk) pk = v;
+    sum += v*v; n++;
+  }
+  S.clipped = pk > 0.985;
+  S.level = 20*Math.log10(Math.sqrt(sum/n) + 1e-12);
+  var pct = Math.max(0, Math.min(1, (S.level + 60)/60));
+  elMeter.style.width = (pct*100).toFixed(0) + "%";
+  elMeter.className = S.clipped ? "hot" : "";
+  elMeterVal.textContent = (isFinite(S.level) ? S.level.toFixed(0) : "-∞") + " dBFS";
+
+  an.getFloatFrequencyData(audio.dbBuf);
+  frame(audio.dbBuf);
+}
+
+/* ============================ controls ============================ */
+function setPressed(btn, on){ btn.setAttribute("aria-pressed", on ? "true" : "false"); }
+
+$("mDemo").onclick = function(){ if(S.mode !== "demo") startDemo(); };
+$("mMic").onclick  = function(){ if(S.mode !== "mic") startMic(); };
+elStart.onclick    = function(){ S.mode === "mic" ? startDemo() : startMic(); };
+
+$("resetBtn").onclick = function(){
+  S.peak = 0; S.hist.length = 0; S.raw.length = 0;
+  if(S.mode === "demo") seedDemoHistory();
+  paint();
+};
+
+Array.prototype.forEach.call(document.querySelectorAll(".bl"), function(b){
+  b.onclick = function(){
+    Array.prototype.forEach.call(document.querySelectorAll(".bl"), function(o){ setPressed(o, o === b); });
+    S.blades = +b.dataset.b;
+    S.raw.length = 0; S.hist.length = 0; S.peak = 0;
+    if(S.mode === "demo"){ seedDemoHistory(); demoTick(); } else paint();
+  };
+});
+
+function bandChange(){
+  var a = +$("rMin").value, b = +$("rMax").value;
+  if(!(a > 0) || !(b > a)) return;
+  S.rpmMin = a; S.rpmMax = b;
+  elScale.children[0].textContent = fmt(a);
+  elScale.children[1].textContent = fmt(b);
+  elTestRpm.min = a; elTestRpm.max = b;
+  if(S.demoRpm < a || S.demoRpm > b){ S.demoRpm = Math.round((a + b)/2); elTestRpm.value = S.demoRpm; elTestLab.textContent = fmt(S.demoRpm) + " rpm"; }
+  S.raw.length = 0; S.hist.length = 0; S.peak = 0;
+  if(S.mode === "demo"){ seedDemoHistory(); demoTick(); } else paint();
+}
+$("rMin").onchange = bandChange;
+$("rMax").onchange = bandChange;
+
+elTestRpm.oninput = function(){
+  S.demoRpm = +elTestRpm.value;
+  elTestLab.textContent = fmt(S.demoRpm) + " rpm";
+  if(S.mode === "demo"){ S.raw.length = 0; demoTick(); }
+};
+
+/* hover probes */
+function bindHover(cvId, set){
+  var cv = $(cvId);
+  cv.addEventListener("pointermove", function(e){
+    var r = cv.getBoundingClientRect();
+    set(e.clientX - r.left);
+    paint();
+  });
+  cv.addEventListener("pointerleave", function(){ set(null); paint(); });
+}
+bindHover("specCv", function(x){ specHover = x; });
+bindHover("trendCv", function(x){ trendHover = x; });
+
+var rt = 0;
+window.addEventListener("resize", function(){ clearTimeout(rt); rt = setTimeout(paint, 120); });
+try{ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paint); }catch(e){}
+
+/* ============================ boot ============================ */
+(function(){
+  if(!framed) return;
+  var pol = micAllowedByPolicy();
+  var h = $("frameHint");
+  h.innerHTML = (pol === false)
+    ? "<b>Microphone unavailable in this frame.</b> Self-test works here, but live capture needs the page open in a browser tab: <a href=\"" + SHARE_URL + "\" target=\"_blank\" rel=\"noopener\">open the tach</a>."
+    : "<b>Running in an embedded preview.</b> If the microphone comes back blocked, open the page in a browser tab instead: <a href=\"" + SHARE_URL + "\" target=\"_blank\" rel=\"noopener\">open the tach</a>.";
+  h.hidden = false;
+})();
+
+elScale.children[0].textContent = fmt(S.rpmMin);
+elScale.children[1].textContent = fmt(S.rpmMax);
+elTestLab.textContent = fmt(S.demoRpm) + " rpm";
+startDemo();
+
+})();
+</script>
+
+<script>
+/* Offline support: the flight line rarely has signal. */
+if("serviceWorker" in navigator){
+  addEventListener("load", function(){
+    navigator.serviceWorker.register("./sw.js").catch(function(){ /* http:// or private mode - app still runs */ });
+  });
+}
+</script>
+</body>
+</html>
