@@ -114,6 +114,8 @@ p{margin:0}
 .track .tick{position:absolute;inset-block:0;width:1px;background:var(--line)}
 .scale{display:flex;justify-content:space-between;margin-top:5px}
 .scale span{font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+.alt{margin-top:10px;font-family:var(--mono);font-size:11.5px;line-height:1.45;color:var(--ink-2);background:var(--surface-2);border-left:2px solid var(--warn);padding:7px 9px;border-radius:0 6px 6px 0}
+.alt b{color:var(--ink);font-weight:600}
 
 .facts{display:grid;grid-template-columns:1fr 1fr;gap:1px;margin:14px 0 0;background:var(--line-soft);border:1px solid var(--line-soft);border-radius:8px;overflow:hidden}
 .facts>div{background:var(--surface);padding:8px 10px;display:flex;flex-direction:column;gap:2px}
@@ -208,6 +210,7 @@ figcaption strong{font-size:13.5px;font-weight:600}
         <div class="track" id="track"><div class="fill" id="trackFill"></div></div>
         <div class="scale" id="scale"><span>1 000</span><span>6 000</span></div>
       </div>
+      <p class="alt" id="altLine" hidden></p>
 
       <dl class="facts">
         <div><dt class="lab">Blade pass</dt><dd id="fHz">71.2 <small>Hz</small></dd></div>
@@ -241,8 +244,10 @@ figcaption strong{font-size:13.5px;font-weight:600}
         <span class="lab">Source</span>
         <div class="seg" role="group" aria-label="Signal source">
           <button id="mDemo" aria-pressed="true">Self-test</button>
-          <button id="mMic" aria-pressed="false">Microphone</button>
+          <button id="mMic" aria-pressed="false">Mic</button>
+          <button id="mFile" aria-pressed="false">Recording</button>
         </div>
+        <input type="file" id="fileInput" accept="audio/*,video/*" hidden>
       </div>
       <div class="field">
         <span class="lab">Blade count</span>
@@ -321,9 +326,9 @@ var S = {
   mode:"demo", blades:2, rpmMin:1000, rpmMax:6000,
   sampleRate:48000, binHz:48000/FFT,
   spec:null, rpm:null, freq:null, conf:0, locked:false,
-  raw:[], hist:[], peak:0, pending:[], lastT:0, inRange:true, corrected:false,
+  raw:[], hist:[], peak:0, pending:[], lastT:0, inRange:true, corrected:false, other:null,
   level:-Infinity, clipped:false,
-  demoRpm:2137, demoPhase:0
+  demoRpm:2137, demoActual:null, demoPhase:0
 };
 var audio = { ctx:null, stream:null, analyser:null, src:null, dbBuf:null, timeBuf:null, raf:0, wake:null };
 
@@ -386,52 +391,117 @@ function descend(dB, binHz, f, fFloor){
   return f;
 }
 
+/* How much of a harmonic comb is actually there, 0..M. A real rotor puts a
+   peak on every multiple; a chance alignment does not. */
+function combQuality(dB, binHz, f, M){
+  var hit = 0, m;
+  for(m = 1; m <= M; m++) if(partialPresent(dB, binHz, f*m, 6)) hit++;
+  return hit;
+}
+
+/* Measuring the m-th harmonic and dividing by m divides the frequency error by
+   m too, and a higher harmonic is often the cleaner peak - the fundamental may
+   be buried under the mic's rolloff or missing outright. Pick the best-resolved
+   partial and work back from it. */
+function refine(dB, binHz, f, M){
+  var n = dB.length, bestM = 1, bestScore = -Infinity, m, k, pk, i, half, ex;
+  for(m = 1; m <= M; m++){
+    k = Math.round(f*m/binHz);
+    half = Math.ceil(m/2) + 1;                       /* allow for error in f, scaled by m */
+    if(k - half < 2 || k + half > n-3) break;
+    pk = k;
+    for(i = k-half; i <= k+half; i++) if(dB[i] > dB[pk]) pk = i;
+    ex = dB[pk] - localMedian(dB, pk, 24);
+    if(ex < 8) continue;
+    if(ex + 5*m > bestScore){ bestScore = ex + 5*m; bestM = m; }
+  }
+  k = Math.round(f*bestM/binHz);
+  half = Math.ceil(bestM/2) + 1;
+  if(k - half < 2 || k + half > n-3) return f;
+  pk = k;
+  for(i = k-half; i <= k+half; i++) if(dB[i] > dB[pk]) pk = i;
+  var a = dB[pk-1], b = dB[pk], c = dB[pk+1], d = 0, den = a - 2*b + c;
+  if(isFinite(den) && den < -1e-9){ d = 0.5*(a-c)/den; if(!(d > -0.5 && d < 0.5)) d = 0; }
+  return (pk + d)*binHz/bestM;
+}
+
 function detect(dB, binHz, blades, rpmMin, rpmMax){
   var n = dB.length;
-  /* Search floor is fixed low, NOT the user's minimum: a rotor spooling up
-     passes below any sensible minimum, and clamping the search there is what
-     makes the reading jump to a harmonic instead of admitting it is low. */
   var fFloor = Math.max(8, RPM_FLOOR*blades/60);
   var fMax = rpmMax*blades/60;
   var kMin = Math.max(3, Math.floor(fFloor/binHz));
   var kMax = Math.min(Math.floor((n-1)/HARM), Math.ceil(fMax/binHz));
   if(kMax <= kMin) return null;
 
-  var vals = [], best = -Infinity, bestK = -1, k, r, s, v;
+  var hps = new Float64Array(kMax + 2), vals = [], best = -Infinity, k, r, s, v;
   for(k = kMin; k <= kMax; k++){
     s = 0;
     for(r = 1; r <= HARM; r++){
       v = dB[k*r];
       s += (isFinite(v) && v > CLAMP_DB) ? v : CLAMP_DB;
     }
-    vals.push(s);
-    if(s > best){ best = s; bestK = k; }
-  }
-  if(bestK < 0) return null;
-
-  /* snap to the nearest true ridge in the raw spectrum (HPS can sit a bin off) */
-  var pk = bestK;
-  for(k = Math.max(1, bestK-2); k <= Math.min(n-2, bestK+2); k++) if(dB[k] > dB[pk]) pk = k;
-
-  /* correct a harmonic lock before measuring */
-  var fRaw = pk*binHz;
-  var fFund = descend(dB, binHz, fRaw, fFloor);
-  var corrected = fFund < fRaw*0.95;
-  if(corrected){
-    pk = Math.max(2, Math.min(n-3, Math.round(fFund/binHz)));
-    for(k = Math.max(1, pk-2); k <= Math.min(n-2, pk+2); k++) if(dB[k] > dB[pk]) pk = k;
+    hps[k] = s; vals.push(s);
+    if(s > best) best = s;
   }
 
-  /* parabolic interpolation on log magnitude */
-  var a = dB[pk-1], b = dB[pk], c = dB[pk+1], d = 0, den = a - 2*b + c;
-  if(isFinite(den) && den < -1e-9){ d = 0.5*(a-c)/den; if(!(d > -0.5 && d < 0.5)) d = 0; }
+  /* Every ridge in the HPS curve is a competing explanation, not just the tallest. */
+  var ridges = [];
+  for(k = kMin + 1; k < kMax; k++) if(hps[k] >= hps[k-1] && hps[k] > hps[k+1]) ridges.push(k);
+  if(!ridges.length) return null;
+  ridges.sort(function(a, b){ return hps[b] - hps[a]; });
+  ridges = ridges.slice(0, 12);
 
-  var sorted = vals.slice().sort(function(x,y){ return x-y; });
+  var cands = [], i, j;
+  for(i = 0; i < ridges.length; i++){
+    var kr = ridges[i], pk = kr;
+    for(k = Math.max(1, kr-2); k <= Math.min(n-2, kr+2); k++) if(dB[k] > dB[pk]) pk = k;
+    var f = descend(dB, binHz, pk*binHz, fFloor);
+    if(f < fFloor) continue;
+    var dup = false;
+    for(j = 0; j < cands.length; j++) if(Math.abs(cands[j].f - f) < 0.02*f){ dup = true; break; }
+    if(dup) continue;
+    cands.push({ f:f, score:hps[kr], comb:combQuality(dB, binHz, f, 6) });
+  }
+  if(!cands.length) return null;
+
+  /* A tail rotor is geared several times faster than the head and sits where a
+     phone mic is most sensitive, so its comb is often the LOUDER one - and it is
+     not a harmonic of the head, so it cannot be divided back down. Among the
+     candidates that are genuinely well formed, take the lowest frequency: the
+     head is always below anything driven off it.
+     Loudness is deliberately NOT part of this: the tail wins on loudness, and
+     a fully formed comb is already strong evidence on its own - six real peaks
+     on exact multiples do not happen by chance, and a sub-multiple of the head
+     cannot produce one because its odd partials are missing. */
+  var strong = [], need;
+  for(need = 6; need >= 4 && !strong.length; need--)
+    for(i = 0; i < cands.length; i++) if(cands[i].comb >= need) strong.push(cands[i]);
+  if(!strong.length) strong = cands.slice();
+
+  strong.sort(function(a, b){ return a.f - b.f; });
+  var chosen = strong[0];
+
+  /* strongest competing comb, for the ambiguity readout */
+  var other = null;
+  for(i = 0; i < cands.length; i++)
+    if(cands[i].f > chosen.f*1.5 && cands[i].comb >= 5)
+      if(!other || cands[i].score > other.score) other = cands[i];
+
+  var freq = refine(dB, binHz, chosen.f, 5);
+
+  var sorted = vals.slice().sort(function(x, y){ return x-y; });
   var med = sorted[sorted.length>>1];
   var conf = Math.max(0, Math.min(1, (best - med)/80));
 
-  var freq = (pk + d)*binHz;
-  return { freq:freq, rpm:60*freq/blades, conf:conf, bin:pk, corrected:corrected };
+  return {
+    freq: freq,
+    rpm: 60*freq/blades,
+    conf: conf,
+    bin: Math.max(1, Math.min(n-2, Math.round(freq/binHz))),
+    comb: chosen.comb,
+    corrected: chosen.score < best - 1,
+    otherRpm: other ? 60*other.f/blades : null
+  };
 }
 
 function median(arr){
@@ -497,13 +567,14 @@ function frame(dB){
       S.lastT = now;
       S.inRange = S.rpm >= S.rpmMin && S.rpm <= S.rpmMax;
       S.corrected = !!r.corrected;
+      S.other = r.otherRpm;
       if(S.inRange && S.rpm > S.peak) S.peak = S.rpm;   /* out-of-range never sets peak hold */
       S.hist.push({ t:now, rpm:S.rpm, ok:S.inRange });
     }
     S.conf = r.conf; S.locked = true;
   } else {
     S.conf = r ? r.conf : 0;
-    S.locked = false;
+    S.locked = false; S.other = null;
     S.raw.length = 0; S.pending.length = 0;
   }
   while(S.hist.length && now - S.hist[0].t > 60000) S.hist.shift();
@@ -527,17 +598,36 @@ function paint(){
   elPeak.textContent = S.peak ? fmt(S.peak) : "—";
   elRes.innerHTML = Math.round(60*S.binHz/S.blades) + " <small>rpm</small>";
 
+  var alt = $("altLine");
+  if(S.other && S.rpm){
+    var ratio = S.other/S.rpm, what;
+    if(ratio > 3.2 && ratio < 6.5)       what = "a tail rotor (" + ratio.toFixed(1) + "\u00d7 the head)";
+    else if(Math.abs(ratio - 2) < 0.12)  what = "the 2nd harmonic";
+    else if(Math.abs(ratio - 3) < 0.15)  what = "the 3rd harmonic";
+    else                                 what = "another source";
+    alt.innerHTML = "Competing tone at <b>" + fmt(S.other) + " rpm</b> \u2014 " + what + ". The head is the lowest well-formed comb, so that one is ignored.";
+    alt.hidden = false;
+  } else alt.hidden = true;
+
   var pct = S.rpm == null ? 0 : (S.rpm - S.rpmMin)/(S.rpmMax - S.rpmMin);
   elFill.style.width = (Math.max(0, Math.min(1, pct))*100).toFixed(2) + "%";
 
   if(S.mode === "demo"){
-    var err = S.rpm == null ? null : S.rpm - S.demoRpm;
-    elVIn.textContent = fmt(S.demoRpm);
+    var inj = S.demoActual != null ? S.demoActual : S.demoRpm;
+    var err = S.rpm == null ? null : S.rpm - inj;
+    elVIn.textContent = fmt(inj);
     elVOut.textContent = S.rpm == null ? "—" : fmt(S.rpm);
     elVErr.textContent = err == null ? "—" : (err >= 0 ? "+" : "−") + fmt(Math.abs(err));
-    var ok = err != null && Math.abs(err) <= Math.max(15, S.demoRpm*0.01);
+    var ok = err != null && Math.abs(err) <= Math.max(15, inj*0.01);
     elVChip.dataset.s = ok ? "" : "bad";
     elVChip.textContent = ok ? "Pass" : "Off";
+  } else if(S.mode === "file"){
+    var pos = audio.ctx ? Math.max(0, Math.min(audio.fileDur || 0, audio.ctx.currentTime - (audio.fileT0 || 0))) : 0;
+    elVIn.textContent = pos.toFixed(1) + " s";
+    elVOut.textContent = (audio.fileDur || 0).toFixed(1) + " s";
+    elVErr.textContent = (S.sampleRate/1000).toFixed(1) + "k";
+    elVChip.dataset.s = "";
+    elVChip.textContent = audio.fileEnded ? "Finished" : "Playing";
   } else {
     elVIn.textContent = isFinite(S.level) ? S.level.toFixed(1) : "−∞";
     elVOut.textContent = S.clipped ? "Clipping" : "Clean";
@@ -723,6 +813,7 @@ function demoTick(){
   /* governed head speed with a little wander, as an ESC governor actually holds */
   var jitter = Math.sin(S.demoPhase*0.9)*7 + Math.sin(S.demoPhase*2.7)*4;
   var rpm = S.demoRpm + jitter;
+  S.demoActual = rpm;                 /* compare against what was really injected */
   frame(synth(rpm, S.blades, S.binHz, 2600));
 }
 function seedDemoHistory(){
@@ -755,13 +846,65 @@ function startDemo(){
   demoTick();
   clearInterval(demoTimer);
   if(!reduceMotion) demoTimer = setInterval(demoTick, 100);
-  setPressed($("mDemo"), true); setPressed($("mMic"), false);
+  setPressed($("mDemo"), true); setPressed($("mMic"), false); setPressed($("mFile"), false);
+}
+
+/* ============================ recording ============================ */
+/* Decoding a file straight into the analyser removes the speaker-and-microphone
+   path entirely, which is the only honest way to test against a clip whose real
+   head speed you already know. It needs no mic permission either. */
+function startFile(file){
+  stopMic();
+  elErr.hidden = true;
+  var AC = window.AudioContext || window.webkitAudioContext;
+  if(!AC || !window.OfflineAudioContext){ return fail("<b>This browser can\u2019t decode audio files.</b> Use Chrome or Safari."); }
+  audio.ctx = new AC();
+  S.sampleRate = audio.ctx.sampleRate; S.binHz = S.sampleRate/FFT;
+
+  file.arrayBuffer()
+    .then(function(buf){ return audio.ctx.decodeAudioData(buf); })
+    .then(function(abuf){
+      var an = audio.ctx.createAnalyser();
+      an.fftSize = FFT; an.smoothingTimeConstant = 0;
+      audio.analyser = an;
+      audio.dbBuf = new Float32Array(an.frequencyBinCount);
+      audio.timeBuf = new Float32Array(an.fftSize);
+
+      var src = audio.ctx.createBufferSource();
+      src.buffer = abuf;
+      src.connect(an);                 /* analyser only - nothing reaches the speakers */
+      audio.fileSrc = src;
+      audio.fileName = file.name;
+      audio.fileDur = abuf.duration;
+      audio.fileT0 = audio.ctx.currentTime;
+      src.onended = function(){ audio.fileEnded = true; };
+      audio.fileEnded = false;
+      src.start();
+
+      S.mode = "file"; S.raw.length = 0; S.pending.length = 0;
+      S.hist.length = 0; S.rpm = null; S.freq = null; S.peak = 0; S.other = null;
+      elPill.textContent = "Recording"; elPill.className = "pill live";
+      elVTitle.textContent = "Recording";
+      elVGrid.children[0].firstChild.textContent = "Position";
+      elVGrid.children[1].firstChild.textContent = "Length";
+      elVGrid.children[2].firstChild.textContent = "Sample rate";
+      elVSlider.hidden = true;
+      elVNote.textContent = "Decoded straight into the detector \u2014 no speaker, no microphone, nothing to colour the signal. This is the setup to use when you already know the clip\u2019s real head speed.";
+      elStart.textContent = "Stop";
+      setPressed($("mDemo"), false); setPressed($("mMic"), false); setPressed($("mFile"), true);
+      loop();
+    })
+    .catch(function(){
+      fail("<b>Couldn\u2019t decode that file.</b> The browser could not read an audio track from it. An .m4a, .mp3, .wav or .ogg works most reliably; some video containers do not decode here.");
+      startDemo();
+    });
 }
 
 /* ============================ microphone ============================ */
 function stopMic(){
   clearInterval(demoTimer); demoTimer = 0;
   if(audio.raf) cancelAnimationFrame(audio.raf), audio.raf = 0;
+  if(audio.fileSrc){ try{ audio.fileSrc.stop(); }catch(e){} audio.fileSrc.disconnect(); audio.fileSrc = null; }
   if(audio.stream){ audio.stream.getTracks().forEach(function(t){ t.stop(); }); audio.stream = null; }
   if(audio.ctx){ audio.ctx.close().catch(function(){}); audio.ctx = null; }
   if(audio.wake){ try{ audio.wake.release(); }catch(e){} audio.wake = null; }
@@ -801,7 +944,7 @@ function startMic(){
     elVSlider.hidden = true;
     elVNote.textContent = "Echo cancellation, noise suppression and auto-gain are all switched off so the low-frequency rotor tone survives. Keep the level meter out of the red — clipping manufactures harmonics and pushes the reading high.";
     elStart.textContent = "Stop microphone";
-    setPressed($("mDemo"), false); setPressed($("mMic"), true);
+    setPressed($("mDemo"), false); setPressed($("mMic"), true); setPressed($("mFile"), false);
 
     if(navigator.wakeLock) navigator.wakeLock.request("screen").then(function(w){ audio.wake = w; }).catch(function(){});
     loop();
@@ -858,7 +1001,13 @@ function setPressed(btn, on){ btn.setAttribute("aria-pressed", on ? "true" : "fa
 
 $("mDemo").onclick = function(){ if(S.mode !== "demo") startDemo(); };
 $("mMic").onclick  = function(){ if(S.mode !== "mic") startMic(); };
-elStart.onclick    = function(){ S.mode === "mic" ? startDemo() : startMic(); };
+$("mFile").onclick = function(){ $("fileInput").click(); };
+$("fileInput").onchange = function(){
+  var f = this.files && this.files[0];
+  if(f) startFile(f);
+  this.value = "";                     /* so the same file can be reloaded */
+};
+elStart.onclick    = function(){ S.mode === "demo" ? startMic() : startDemo(); };
 
 $("resetBtn").onclick = function(){
   S.peak = 0; S.hist.length = 0; S.raw.length = 0;

@@ -29,6 +29,29 @@ The signal chain:
 | Refine | Parabolic interpolation on the log-magnitude peak, resolving between bins |
 | Gate | Median-of-5 smoothing plus a confidence threshold; below it the last value is held and greyed rather than flickering |
 
+## Two things that steal the lock
+
+**Harmonics.** A mic rolls off steeply below ~200 Hz, so the fundamental can sit
+25 dB under its own harmonics and a naive pick returns 2x or 4x the real speed.
+
+**The tail rotor.** Geared several times faster than the head and sitting where a
+phone mic is *most* sensitive, it is often the louder comb — and because the tail
+ratio is not an integer, it is not a harmonic of the head and cannot be divided
+back down. For a 4.53:1 tail on two blades it lands inside a 1000–6000 rpm search
+band whenever the head is below ~1500 rpm, which is precisely the spool-up window:
+
+| Head rpm | Tail blade-pass | Reads as |
+|---:|---:|---:|
+| 800 | 120.8 Hz | 3 624 rpm |
+| 1 000 | 151.0 Hz | 4 530 rpm |
+| 1 300 | 196.3 Hz | 5 889 rpm |
+
+The detector answers both by scoring *every* ridge in the HPS curve as a competing
+explanation, keeping those with a fully formed comb, and taking the **lowest**
+one. Loudness is deliberately not a factor: six real peaks on exact multiples do
+not happen by chance, and the head is always below anything driven off it. Any
+well-formed comb above the reading is reported on screen rather than hidden.
+
 ## Why the search floor matters
 
 A microphone — and far more so a small speaker — rolls off steeply below about
@@ -58,6 +81,12 @@ signature — harmonics, a pink noise floor, and the sub-100 Hz rolloff a handse
 microphone actually has. Move the test-tone slider and the measured value should
 track it. Measured error on a 2-blade head at 2 137 rpm is about +7 rpm, roughly
 one sixth of a bin.
+
+**Recording mode** decodes an audio or video file straight into the detector, with
+no speaker and no microphone in the path. This is the way to check the app against
+a clip whose real head speed you already know — playing a clip through a speaker
+into a mic destroys the fundamental before the detector ever sees it, because a
+small speaker cannot reproduce 30–60 Hz at any useful level.
 
 Verify against a real signal before trusting it: a bench motor with ESC telemetry,
 or an optical tachometer.
