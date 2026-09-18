@@ -153,6 +153,8 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .err code{font-family:var(--mono);font-size:12.5px;word-break:break-all;display:inline-block}
 .hint{font-size:13.5px;color:var(--ink-2);line-height:1.5;background:var(--surface-2);border:1px solid var(--line);border-radius:7px;padding:9px 11px}
 .hint b{color:var(--ink)}
+.diag{margin-top:7px;padding-top:7px;border-top:1px solid var(--crit-soft);
+  font-family:var(--mono);font-size:12px;color:var(--ink-2);letter-spacing:.02em}
 
 /* ---------- charts ---------- */
 figure.chart{margin:0}
@@ -920,57 +922,114 @@ function stopMic(){
   audio.analyser = null;
 }
 
-function startMic(retried){
+/* Asking for a mono, completely unprocessed stream is the right thing to want,
+   but it is a hard constraint and some Android audio paths cannot open that
+   configuration at all - which surfaces as NotReadableError, not as
+   OverconstrainedError. So ask for the best case first and step down, rather
+   than retrying the same impossible request. */
+var MIC_TRIES = [
+  { label:"unprocessed mono",
+    c:{ audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:1 } } },
+  { label:"unprocessed",
+    c:{ audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false } } },
+  { label:"unprocessed if possible",
+    c:{ audio:{ echoCancellation:{ideal:false}, noiseSuppression:{ideal:false}, autoGainControl:{ideal:false} } } },
+  { label:"device default",
+    c:{ audio:true } }
+];
+
+function startMic(){
   elErr.hidden = true;
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-    return fail("<b>This browser can’t open a microphone.</b> <code>getUserMedia</code> is unavailable here — use Chrome or Safari, over https, in a normal browser tab.");
+    return fail("<b>This browser can\u2019t open a microphone.</b> <code>getUserMedia</code> is unavailable here \u2014 use Chrome or Safari, over https, in a normal browser tab.");
   }
   stopMic();                      /* never ask for a mic while still holding one */
-  navigator.mediaDevices.getUserMedia({ audio:{
-      echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:1
-  }}).then(function(stream){
-    clearInterval(demoTimer); demoTimer = 0;
-    audio.stream = stream;
-    var AC = window.AudioContext || window.webkitAudioContext;
-    audio.ctx = new AC();
-    if(audio.ctx.state === "suspended") audio.ctx.resume();
-    S.sampleRate = audio.ctx.sampleRate;
-    S.binHz = S.sampleRate/FFT;
 
-    var an = audio.ctx.createAnalyser();
-    an.fftSize = FFT; an.smoothingTimeConstant = 0;
-    audio.analyser = an;
-    audio.src = audio.ctx.createMediaStreamSource(stream);
-    audio.src.connect(an);
-    audio.dbBuf = new Float32Array(an.frequencyBinCount);
-    audio.timeBuf = new Float32Array(an.fftSize);
+  var i = 0, lastErr = null;
+  (function attempt(){
+    if(i >= MIC_TRIES.length) return failWithDiagnostics(lastErr);
+    var t = MIC_TRIES[i++];
+    navigator.mediaDevices.getUserMedia(t.c)
+      .then(function(stream){ onMicStream(stream, t.label); })
+      .catch(function(e){
+        lastErr = e;
+        /* A refusal by the person is final - stepping down cannot help. */
+        if(e && e.name === "NotAllowedError") return failWithDiagnostics(e);
+        setTimeout(attempt, 250);
+      });
+  })();
+}
 
-    S.mode = "mic"; S.raw.length = 0; S.hist.length = 0; S.rpm = null; S.freq = null;
-    elPill.textContent = "Live · microphone"; elPill.className = "pill live";
-    elVTitle.textContent = "Input signal";
-    elVGrid.children[0].firstChild.textContent = "Level dBFS";
-    elVGrid.children[1].firstChild.textContent = "Headroom";
-    elVGrid.children[2].firstChild.textContent = "Sample rate";
-    elVSlider.hidden = true;
-    elVNote.textContent = "Echo cancellation, noise suppression and auto-gain are all switched off so the low-frequency rotor tone survives. Keep the level meter out of the red — clipping manufactures harmonics and pushes the reading high.";
-    elStart.textContent = "Stop microphone";
-    setPressed($("mDemo"), false); setPressed($("mMic"), true); setPressed($("mFile"), false);
+function onMicStream(stream, how){
+  clearInterval(demoTimer); demoTimer = 0;
+  audio.stream = stream;
+  var AC = window.AudioContext || window.webkitAudioContext;
+  audio.ctx = new AC();
+  if(audio.ctx.state === "suspended") audio.ctx.resume();
+  S.sampleRate = audio.ctx.sampleRate;
+  S.binHz = S.sampleRate/FFT;
 
-    if(navigator.wakeLock) navigator.wakeLock.request("screen").then(function(w){ audio.wake = w; }).catch(function(){});
-    loop();
-  }).catch(function(e){
-    var nm = (e && e.name) ? e.name : "error";
-    /* NotReadableError is the OS refusing the hardware, not a permission
-       problem. Most often something still holds the mic - possibly a stream
-       of ours that was never released - so let go and try once more. */
-    if(nm === "NotReadableError" && !retried){
-      stopMic();
-      setTimeout(function(){ startMic(true); }, 400);
-      return;
-    }
-    fail(micFailure(e));
+  var an = audio.ctx.createAnalyser();
+  an.fftSize = FFT; an.smoothingTimeConstant = 0;
+  audio.analyser = an;
+  audio.src = audio.ctx.createMediaStreamSource(stream);
+  audio.src.connect(an);
+  audio.dbBuf = new Float32Array(an.frequencyBinCount);
+  audio.timeBuf = new Float32Array(an.fftSize);
+
+  /* What the device actually gave us, which is not always what was asked for. */
+  var tr = stream.getAudioTracks()[0];
+  var st = (tr && tr.getSettings) ? tr.getSettings() : {};
+  var processed = !!(st.echoCancellation || st.noiseSuppression || st.autoGainControl);
+
+  S.mode = "mic"; S.raw.length = 0; S.pending.length = 0;
+  S.hist.length = 0; S.rpm = null; S.freq = null; S.other = null;
+  elPill.textContent = "Live \u00b7 microphone"; elPill.className = "pill live";
+  elVTitle.textContent = "Input signal";
+  elVGrid.children[0].firstChild.textContent = "Level dBFS";
+  elVGrid.children[1].firstChild.textContent = "Headroom";
+  elVGrid.children[2].firstChild.textContent = "Sample rate";
+  elVSlider.hidden = true;
+  elVNote.textContent = processed
+    ? "This device would not open an unprocessed stream, so it is running on \u201c" + how + "\u201d with its own processing active. Auto-gain and noise suppression fight a steady low tone, so expect a weaker lock, especially below 1 500 rpm. Recording mode is unaffected."
+    : "Echo cancellation, noise suppression and auto-gain are all switched off (\u201c" + how + "\u201d) so the low-frequency rotor tone survives. Keep the level meter out of the red \u2014 clipping manufactures harmonics and pushes the reading high.";
+  elStart.textContent = "Stop microphone";
+  setPressed($("mDemo"), false); setPressed($("mMic"), true); setPressed($("mFile"), false);
+
+  var h = $("frameHint");
+  if(processed){
+    h.innerHTML = "<b>Running with device audio processing on.</b> An unprocessed stream was refused, so readings may be less steady at low head speeds.";
+    h.hidden = false;
+  } else if(!framed) h.hidden = true;
+
+  if(navigator.wakeLock) navigator.wakeLock.request("screen").then(function(w){ audio.wake = w; }).catch(function(){});
+  loop();
+}
+
+/* When every attempt fails, say what the browser actually reports rather than
+   leaving the person to guess which of the possible causes it was. */
+function failWithDiagnostics(e){
+  var parts = [], pending = 2;
+  function done(){
+    if(--pending) return;
+    fail(micFailure(e) + '<div class="diag">' + parts.join(" \u00b7 ") + "</div>");
     startDemo();
-  });
+  }
+  parts.push("error: " + ((e && e.name) || "unknown"));
+  try{
+    navigator.permissions.query({ name:"microphone" })
+      .then(function(p){ parts.push("permission: " + p.state); done(); })
+      .catch(function(){ parts.push("permission: not reported"); done(); });
+  }catch(err){ parts.push("permission: not reported"); done(); }
+  try{
+    navigator.mediaDevices.enumerateDevices()
+      .then(function(ds){
+        var ins = ds.filter(function(d){ return d.kind === "audioinput"; });
+        parts.push(ins.length + " audio input" + (ins.length === 1 ? "" : "s"));
+        done();
+      })
+      .catch(function(){ parts.push("device list unavailable"); done(); });
+  }catch(err){ parts.push("device list unavailable"); done(); }
 }
 
 function fail(html){ elErr.innerHTML = html; elErr.hidden = false; }
@@ -985,7 +1044,7 @@ function micFailure(e){
   if(name === "NotFoundError" || name === "DevicesNotFoundError")
     return "<b>No microphone found.</b> This device reports no audio input.";
   if(name === "NotReadableError")
-    return "<b>The microphone was granted but could not be opened.</b> Something else is holding it. Close any other copy of this page (browser tab, home-screen app, or the installed APK), stop any recorder, voice assistant or call, and check the microphone is not switched off in your device\u2019s privacy settings. Then tap Start microphone again.";
+    return "<b>The microphone was granted but could not be opened.</b> Every stream configuration was refused, from unprocessed mono down to the device default, so this is the audio hardware itself saying no rather than a settings problem. Usually something else holds it. Close any other copy of this page (browser tab, home-screen app, or the installed APK), stop any recorder, voice assistant or call, and check the microphone is not switched off in your device\u2019s privacy settings. Then tap Start microphone again.";
   return "<b>Couldn\u2019t open the microphone</b> (" + name + "). The page must be served over https from a top-level window.";
 }
 
