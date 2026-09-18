@@ -1012,12 +1012,15 @@ function failWithDiagnostics(e){
   var state = null, inputs = null, pending = 2;
   function done(){
     if(--pending) return;
-    var diag = ["error: " + ((e && e.name) || "unknown"),
-                "permission: " + (state || "not reported"),
-                (inputs == null ? "device list unavailable"
-                                : inputs + " audio input" + (inputs === 1 ? "" : "s")),
-                envLabel()];
-    fail(micFailure(e, state) + '<div class="diag">' + diag.join(" \u00b7 ") + "</div>");
+    var diag = ["error: " + ((e && e.name) || "unknown")];
+    if(hostMic()) diag.push("android: " + hostMic(), "webview: " + (hostEvent() || "?"));
+    else diag.push("permission: " + (state || "not reported"));
+    diag.push(inputs == null ? "device list unavailable"
+                             : inputs + " audio input" + (inputs === 1 ? "" : "s"));
+    diag.push(envLabel());
+    var extra = (hostMic() === "blocked" || hostMic() === "denied")
+      ? '<button class="btn" id="openHostSettings" style="margin-top:11px">Open app settings</button>' : "";
+    fail(micFailure(e, state) + '<div class="diag">' + diag.join(" \u00b7 ") + "</div>" + extra);
     startDemo();
   }
   try{
@@ -1033,6 +1036,16 @@ function failWithDiagnostics(e){
 }
 
 function fail(html){ elErr.innerHTML = html; elErr.hidden = false; }
+elErr.addEventListener("click", function(ev){
+  if(ev.target && ev.target.id === "openHostSettings" && host()) host().openAppSettings();
+});
+
+/* Inside a WebView, navigator.permissions reports "prompt" whatever the app's
+   real Android permission is, so it cannot be reasoned from. The shell exposes
+   the truth instead. Absent outside the Android app. */
+function host(){ try{ return window.ZelionTachHost || null; }catch(err){ return null; } }
+function hostMic(){ try{ return host() ? host().micPermission() : null; }catch(err){ return null; } }
+function hostEvent(){ try{ return host() ? host().lastEvent() : null; }catch(err){ return null; } }
 
 function envLabel(){
   var ua = navigator.userAgent || "", standalone = false;
@@ -1054,6 +1067,13 @@ function micFailure(e, permState){
     return "<b>Microphone permission denied.</b> Allow microphone access for this site in your browser\u2019s site settings, then tap Start microphone again.";
   if(name === "NotFoundError" || name === "DevicesNotFoundError")
     return "<b>No microphone found.</b> This device reports no audio input.";
+  var hp = hostMic();
+  if(hp === "blocked")
+    return "<b>Microphone is switched off for this app.</b> Android has it blocked and will not ask again, so nothing the app does can open it. Turn it on under Permissions, then tap Start microphone again. Recording mode works without it.";
+  if(hp === "denied")
+    return "<b>Microphone permission was declined.</b> Tap Start microphone again and choose Allow when Android asks.";
+  if(name === "NotReadableError" && hp === "granted")
+    return "<b>Android allows the microphone, but the device would not open it.</b> Every configuration was refused, from unprocessed mono down to the device default. Something else is holding the microphone \u2014 close any recorder, voice assistant, call, or another copy of this app \u2014 then tap Start microphone again. Recording mode is unaffected.";
   if(name === "NotReadableError" && permState && permState !== "granted")
     return "<b>The microphone was never actually granted.</b> The request failed before you were asked for it \u2014 permission still reads \u201c" + permState + "\u201d. In the Android app this means the app\u2019s own microphone permission is off: open Android Settings \u2192 Apps \u2192 Zelion Tach \u2192 Permissions and turn Microphone on, then tap Start microphone again. In a browser, clear this site\u2019s permissions and reload so it can ask afresh.";
   if(name === "NotReadableError")

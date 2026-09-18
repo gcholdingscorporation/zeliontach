@@ -11,6 +11,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.view.WindowManager;
 import android.webkit.PermissionRequest;
+import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -43,6 +44,10 @@ public class MainActivity extends Activity {
     /* A page's microphone request, held while Android asks for RECORD_AUDIO.
        Denying it up front and asking afterwards fails the page every time. */
     private PermissionRequest pendingWebPermission;
+    /* What the WebView actually did with the last request, so the page can
+       report a fact instead of inferring one from an API that does not work
+       inside a WebView. */
+    private volatile String lastPermissionEvent = "never requested";
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -97,9 +102,11 @@ public class MainActivity extends Activity {
 
                         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
                                 == PackageManager.PERMISSION_GRANTED) {
+                            lastPermissionEvent = "granted to page";
                             req.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
                             return;
                         }
+                        lastPermissionEvent = "held, asking android";
                         /* Hold the request open and settle it once Android has
                            answered, rather than denying it and leaving the page
                            to report a failure the person never caused. */
@@ -130,6 +137,10 @@ public class MainActivity extends Activity {
                 return true;
             }
         });
+
+        /* Only ever loads our own bundled page, so there is nothing untrusted
+           on the other side of this bridge. */
+        web.addJavascriptInterface(new Host(), "ZelionTachHost");
 
         setContentView(web);
         web.loadUrl(START);
@@ -162,9 +173,11 @@ public class MainActivity extends Activity {
 
         if (pendingWebPermission != null) {
             if (granted) {
+                lastPermissionEvent = "granted to page after asking";
                 pendingWebPermission.grant(
                         new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
             } else {
+                lastPermissionEvent = "android refused";
                 pendingWebPermission.deny();
             }
             pendingWebPermission = null;
@@ -190,6 +203,33 @@ public class MainActivity extends Activity {
                     })
                     .setNegativeButton("Not now", null)
                     .show();
+        }
+    }
+
+    /** Ground truth for the page, which cannot get this from the Permissions API. */
+    private class Host {
+        @JavascriptInterface
+        public String micPermission() {
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                    == PackageManager.PERMISSION_GRANTED) return "granted";
+            return shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)
+                    ? "denied" : "blocked";
+        }
+
+        @JavascriptInterface
+        public String lastEvent() { return lastPermissionEvent; }
+
+        @JavascriptInterface
+        public void openAppSettings() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.fromParts("package", getPackageName(), null));
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(i);
+                }
+            });
         }
     }
 

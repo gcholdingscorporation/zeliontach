@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- WebView's media stack routes capture through the audio manager; without
+         this the device can refuse to open even with RECORD_AUDIO granted.
+         Install-time, so it raises no prompt. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-feature android:name="android.hardware.microphone" android:required="true" />
 
     <!-- Everything is bundled; the tach never reaches the network. -->
