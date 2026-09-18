@@ -1,6 +1,6 @@
 /* Zelion Tach - offline shell.
    Network-first for the page so updates land; cache-first for everything else. */
-const CACHE = "zeliontach-v3";
+const CACHE = "zeliontach-v4";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (e) => {

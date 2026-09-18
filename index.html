@@ -911,11 +911,12 @@ function stopMic(){
   audio.analyser = null;
 }
 
-function startMic(){
+function startMic(retried){
   elErr.hidden = true;
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-    return fail("This browser can’t open a microphone. Use Chrome or Safari over https.");
+    return fail("<b>This browser can’t open a microphone.</b> <code>getUserMedia</code> is unavailable here — use Chrome or Safari, over https, in a normal browser tab.");
   }
+  stopMic();                      /* never ask for a mic while still holding one */
   navigator.mediaDevices.getUserMedia({ audio:{
       echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:1
   }}).then(function(stream){
@@ -949,7 +950,16 @@ function startMic(){
     if(navigator.wakeLock) navigator.wakeLock.request("screen").then(function(w){ audio.wake = w; }).catch(function(){});
     loop();
   }).catch(function(e){
-    fail("Microphone blocked (" + (e && e.name ? e.name : "error") + "). Allow microphone access for this page in your browser’s site settings, then tap Start again. The page must be served over https.");
+    var nm = (e && e.name) ? e.name : "error";
+    /* NotReadableError is the OS refusing the hardware, not a permission
+       problem. Most often something still holds the mic - possibly a stream
+       of ours that was never released - so let go and try once more. */
+    if(nm === "NotReadableError" && !retried){
+      stopMic();
+      setTimeout(function(){ startMic(true); }, 400);
+      return;
+    }
+    fail(micFailure(e));
     startDemo();
   });
 }
@@ -966,7 +976,7 @@ function micFailure(e){
   if(name === "NotFoundError" || name === "DevicesNotFoundError")
     return "<b>No microphone found.</b> This device reports no audio input.";
   if(name === "NotReadableError")
-    return "<b>The microphone is busy.</b> Another app or tab is holding it \u2014 close that, then tap Start microphone again.";
+    return "<b>The microphone was granted but could not be opened.</b> Something else is holding it. Close any other copy of this page (browser tab, home-screen app, or the installed APK), stop any recorder, voice assistant or call, and check the microphone is not switched off in your device\u2019s privacy settings. Then tap Start microphone again.";
   return "<b>Couldn\u2019t open the microphone</b> (" + name + "). The page must be served over https from a top-level window.";
 }
 
