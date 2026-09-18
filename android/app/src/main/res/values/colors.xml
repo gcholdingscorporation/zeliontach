@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Mapped from the Rotorflight Configurator palette that the Zelion preset
+     viewer follows, so the tools read as one set. -->
 <resources>
-    <color name="ic_launcher_background">#0E1318</color>
-    <color name="tach_amber">#F0913F</color>
-    <color name="tach_ground">#E9ECEF</color>
-    <color name="tach_ground_night">#0E1318</color>
+    <color name="ic_launcher_background">#252525</color>   <!-- railBackground -->
+    <color name="zelion_blue">#4DA8DA</color>              <!-- darkAccent -->
+    <color name="tach_ground">#F9F9F9</color>              <!-- alternativeBackground -->
+    <color name="tach_ground_night">#252525</color>
 </resources>
