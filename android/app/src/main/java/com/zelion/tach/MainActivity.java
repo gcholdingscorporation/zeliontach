@@ -3,7 +3,9 @@ package com.zelion.tach;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
+import android.provider.Settings;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
@@ -38,6 +40,9 @@ public class MainActivity extends Activity {
 
     private WebView web;
     private ValueCallback<Uri[]> filePicker;
+    /* A page's microphone request, held while Android asks for RECORD_AUDIO.
+       Denying it up front and asking afterwards fails the page every time. */
+    private PermissionRequest pendingWebPermission;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -84,22 +89,31 @@ public class MainActivity extends Activity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
+                        boolean wantsAudio = false;
                         for (String r : req.getResources()) {
-                            if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r)) {
-                                if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
-                                        == PackageManager.PERMISSION_GRANTED) {
-                                    req.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
-                                } else {
-                                    req.deny();
-                                    requestPermissions(
-                                            new String[]{Manifest.permission.RECORD_AUDIO}, REQ_AUDIO);
-                                }
-                                return;
-                            }
+                            if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r)) wantsAudio = true;
                         }
-                        req.deny();
+                        if (!wantsAudio) { req.deny(); return; }
+
+                        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                                == PackageManager.PERMISSION_GRANTED) {
+                            req.grant(new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+                            return;
+                        }
+                        /* Hold the request open and settle it once Android has
+                           answered, rather than denying it and leaving the page
+                           to report a failure the person never caused. */
+                        if (pendingWebPermission != null) pendingWebPermission.deny();
+                        pendingWebPermission = req;
+                        requestPermissions(
+                                new String[]{Manifest.permission.RECORD_AUDIO}, REQ_AUDIO);
                     }
                 });
+            }
+
+            @Override
+            public void onPermissionRequestCanceled(PermissionRequest req) {
+                if (pendingWebPermission == req) pendingWebPermission = null;
             }
 
             @Override
@@ -140,10 +154,42 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int req, String[] perms, int[] grants) {
-        // Reload only on a grant, so the page can ask again and get a yes.
-        if (req == REQ_AUDIO && grants.length > 0
-                && grants[0] == PackageManager.PERMISSION_GRANTED) {
-            web.reload();
+        if (req != REQ_AUDIO) {
+            super.onRequestPermissionsResult(req, perms, grants);
+            return;
+        }
+        boolean granted = grants.length > 0 && grants[0] == PackageManager.PERMISSION_GRANTED;
+
+        if (pendingWebPermission != null) {
+            if (granted) {
+                pendingWebPermission.grant(
+                        new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE});
+            } else {
+                pendingWebPermission.deny();
+            }
+            pendingWebPermission = null;
+        }
+
+        /* Refused with "don't ask again": Android will never show the dialog
+           here again, so the only way back is the app's own settings page. */
+        if (!granted
+                && !shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO)) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Microphone is switched off")
+                    .setMessage("Zelion Tach reads head speed from the microphone, and Android "
+                            + "will no longer ask for it here. Turn it on under Permissions, "
+                            + "then come back. Recording mode works without it.")
+                    .setPositiveButton("Open settings", new android.content.DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(android.content.DialogInterface d, int which) {
+                            Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    Uri.fromParts("package", getPackageName(), null));
+                            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(i);
+                        }
+                    })
+                    .setNegativeButton("Not now", null)
+                    .show();
         }
     }
 

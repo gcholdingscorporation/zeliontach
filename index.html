@@ -1009,32 +1009,43 @@ function onMicStream(stream, how){
 /* When every attempt fails, say what the browser actually reports rather than
    leaving the person to guess which of the possible causes it was. */
 function failWithDiagnostics(e){
-  var parts = [], pending = 2;
+  var state = null, inputs = null, pending = 2;
   function done(){
     if(--pending) return;
-    fail(micFailure(e) + '<div class="diag">' + parts.join(" \u00b7 ") + "</div>");
+    var diag = ["error: " + ((e && e.name) || "unknown"),
+                "permission: " + (state || "not reported"),
+                (inputs == null ? "device list unavailable"
+                                : inputs + " audio input" + (inputs === 1 ? "" : "s")),
+                envLabel()];
+    fail(micFailure(e, state) + '<div class="diag">' + diag.join(" \u00b7 ") + "</div>");
     startDemo();
   }
-  parts.push("error: " + ((e && e.name) || "unknown"));
   try{
     navigator.permissions.query({ name:"microphone" })
-      .then(function(p){ parts.push("permission: " + p.state); done(); })
-      .catch(function(){ parts.push("permission: not reported"); done(); });
-  }catch(err){ parts.push("permission: not reported"); done(); }
+      .then(function(pm){ state = pm.state; done(); })
+      .catch(function(){ done(); });
+  }catch(err){ done(); }
   try{
     navigator.mediaDevices.enumerateDevices()
-      .then(function(ds){
-        var ins = ds.filter(function(d){ return d.kind === "audioinput"; });
-        parts.push(ins.length + " audio input" + (ins.length === 1 ? "" : "s"));
-        done();
-      })
-      .catch(function(){ parts.push("device list unavailable"); done(); });
-  }catch(err){ parts.push("device list unavailable"); done(); }
+      .then(function(ds){ inputs = ds.filter(function(d){ return d.kind === "audioinput"; }).length; done(); })
+      .catch(function(){ done(); });
+  }catch(err){ done(); }
 }
 
 function fail(html){ elErr.innerHTML = html; elErr.hidden = false; }
 
-function micFailure(e){
+function envLabel(){
+  var ua = navigator.userAgent || "", standalone = false;
+  try{ standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; }catch(err){}
+  if(/;\s*wv\)/.test(ua)) return "android app";
+  return standalone ? "installed app" : "browser tab";
+}
+
+/* permState is what the Permissions API reports, or null when it will not say.
+   It decides the message: a NotReadableError while permission still reads
+   "prompt" is not a busy device, it is a request that failed before anyone was
+   ever asked. */
+function micFailure(e, permState){
   var name = (e && e.name) ? e.name : "error";
   var link = '<a href="' + SHARE_URL + '" target="_blank" rel="noopener">' + SHARE_URL + '</a>';
   if(name === "NotAllowedError" && framed)
@@ -1043,8 +1054,10 @@ function micFailure(e){
     return "<b>Microphone permission denied.</b> Allow microphone access for this site in your browser\u2019s site settings, then tap Start microphone again.";
   if(name === "NotFoundError" || name === "DevicesNotFoundError")
     return "<b>No microphone found.</b> This device reports no audio input.";
+  if(name === "NotReadableError" && permState && permState !== "granted")
+    return "<b>The microphone was never actually granted.</b> The request failed before you were asked for it \u2014 permission still reads \u201c" + permState + "\u201d. In the Android app this means the app\u2019s own microphone permission is off: open Android Settings \u2192 Apps \u2192 Zelion Tach \u2192 Permissions and turn Microphone on, then tap Start microphone again. In a browser, clear this site\u2019s permissions and reload so it can ask afresh.";
   if(name === "NotReadableError")
-    return "<b>The microphone was granted but could not be opened.</b> Every stream configuration was refused, from unprocessed mono down to the device default, so this is the audio hardware itself saying no rather than a settings problem. Usually something else holds it. Close any other copy of this page (browser tab, home-screen app, or the installed APK), stop any recorder, voice assistant or call, and check the microphone is not switched off in your device\u2019s privacy settings. Then tap Start microphone again.";
+    return "<b>The microphone was granted but could not be opened.</b> Every stream configuration was refused, from unprocessed mono down to the device default, so this is the audio hardware itself saying no. Close any other copy of this page, stop any recorder, voice assistant or call, and check the microphone is not switched off in your device\u2019s privacy settings. Then tap Start microphone again.";
   return "<b>Couldn\u2019t open the microphone</b> (" + name + "). The page must be served over https from a top-level window.";
 }
 
