@@ -29,8 +29,18 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # The action's default package set still includes the long-obsolete
+      # 'tools' package, which no longer exists in the SDK repository and makes
+      # sdkmanager exit 1. Install nothing by default and ask for what we need.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: ''
+
+      - name: Install the SDK packages this build needs
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
