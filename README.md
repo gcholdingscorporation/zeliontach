@@ -27,7 +27,42 @@ The signal chain:
 | Correction | Sub-harmonic descent: `f/d` is accepted as the real fundamental only when the partials it adds, which `f` cannot account for, are present. For `d=2` those are the odd multiples 1, 3, 5 of `f/2`, and two thirds must be there so one attenuated member cannot sink the test |
 | Slew gate | A candidate implying more than 4 500 rpm/s of change is held back until three consecutive frames agree, which kills harmonic-slip transients without blocking a real spool-up |
 | Refine | Parabolic interpolation on the log-magnitude peak, resolving between bins |
+| Whiten | The noise floor is estimated and subtracted, so broadband noise cannot tilt the scoring |
+| Guard | Sub-multiple combs are folded up to the real fundamental by comparing the strength of the partials they add against the ones they share |
+| Track | Candidates are scored across frames, so transients never accumulate enough history to be believed |
 | Gate | Median-of-5 smoothing plus a confidence threshold; below it the last value is held and greyed rather than flickering |
+
+## Holding a lock in a noisy field
+
+Three things carry the detector through wind, traffic and other models.
+
+**Whitening.** The noise floor is estimated and subtracted before anything
+else, so a tilted floor — wind, road rumble, the handset's own rolloff —
+cannot bias a score that sums decibels across harmonics. Every peak is then
+worth the same wherever it sits.
+
+**The octave guard.** A comb at half the true fundamental contains every real
+harmonic *and* the silent gaps between them, so counting partials cannot tell
+the two apart — both score six out of six. Strength can. On a real recording
+the fake at half read 9 dB on the partials it *adds* against 44 dB on the ones
+it *shares*; a gap that size folds the candidate up to the real fundamental.
+
+**Tracking across frames.** A rotor tone persists and drifts slowly; a shout,
+a gust or a passing model does not. Candidates are scored over time, so a
+transient never accumulates enough history to be believed however loud it was
+for a moment. The expected range is a preference in that scoring, never a
+filter.
+
+Measured over 460 frames of simulated field audio, against the same detector
+making each decision from one frame alone:
+
+| | within 50 rpm | gross errors |
+|---|---:|---:|
+| tracked | **93%** | **3** |
+| single frame | 81% | 75 |
+
+The cost is about three frames — a fifth of a second — before a new tone is
+believed, which is why the clean cases sit at 95% rather than 100%.
 
 ## Two things that steal the lock
 
