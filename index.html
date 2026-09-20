@@ -426,7 +426,16 @@ function partialPresent(w, binHz, f, margin){
    f cannot account for - are present. For d=2 those are the odd multiples
    1, 3, 5 of f/2, and two thirds must be there, so one attenuated member
    cannot sink the test. */
+/* Wind and road noise are loudest at the bottom and fade with height, so they
+   bury the lower added partials while leaving the fundamental itself, which
+   sits below them, and the upper harmonics clear. Counting alone then fails
+   the descent and the reading settles on twice the head speed. A peak standing
+   well clear of its own shoulders at exactly f/d is not a coincidence, though
+   - nothing else puts energy precisely there - so a strong one carries the
+   descent by itself. octaveGuard still runs afterwards and folds the result
+   back up if this went one step too far. */
 var NEW_PARTIALS = { 2:[1,3,5], 3:[1,2,4,5] };
+var LONE_FUND = 12;
 function descend(w, binHz, f, fFloor){
   for(var iter = 0; iter < 5; iter++){
     var moved = false;
@@ -435,7 +444,7 @@ function descend(w, binHz, f, fFloor){
       if(fs < fFloor) continue;
       var ms = NEW_PARTIALS[d], hit = 0, i;
       for(i = 0; i < ms.length; i++) if(partialPresent(w, binHz, fs*ms[i], 7)) hit++;
-      if(hit*3 >= ms.length*2){ f = fs; moved = true; break; }
+      if(hit*3 >= ms.length*2 || partialPresent(w, binHz, fs, LONE_FUND)){ f = fs; moved = true; break; }
     }
     if(!moved) break;
   }
@@ -546,20 +555,54 @@ function analyse(dB, binHz, blades, rpmMax){
   ridges = ridges.slice(0, 12);
 
   var cands = [];
+  function consider(f, score){
+    if(f < fFloor) return;
+    for(var q = 0; q < cands.length; q++) if(Math.abs(cands[q].f - f) < 0.02*f) return;
+    if(combQuality(w, binHz, f, 6) < 4) return;          /* not a comb at all */
+    var strength = combStrength(w, binHz, f, 6);
+    if(strength < 9) return;                             /* a comb of nothing */
+    cands.push({ f:refine(w, binHz, f, 5), comb:strength, snr:strength, score:score });
+  }
+
   for(i = 0; i < ridges.length; i++){
     var kr = ridges[i], pk = kr;
     for(k = Math.max(1, kr-2); k <= Math.min(n-2, kr+2); k++) if(w[k] > w[pk]) pk = k;
-    var f = descend(w, binHz, pk*binHz, fFloor);
-    f = octaveGuard(w, binHz, f, fMax*1.05);
-    if(f < fFloor) continue;
-    var dup = false;
-    for(j = 0; j < cands.length; j++) if(Math.abs(cands[j].f - f) < 0.02*f){ dup = true; break; }
-    if(dup) continue;
-    if(combQuality(w, binHz, f, 6) < 4) continue;        /* not a comb at all */
-    var strength = combStrength(w, binHz, f, 6);
-    if(strength < 9) continue;                           /* a comb of nothing */
-    f = refine(w, binHz, f, 5);
-    cands.push({ f:f, comb:strength, snr:strength, score:hps[kr] });
+    /* Descending is a judgement about which rung is the fundamental, and under
+       band-limited noise it is a judgement made on half the evidence. Offer
+       both readings of the ridge and let the tracker, which sees many frames,
+       settle it - otherwise a descent that cannot then clear the comb gates
+       takes the ridge down with it and the frame yields nothing at all. */
+    var down = octaveGuard(w, binHz, descend(w, binHz, pk*binHz, fFloor), fMax*1.05);
+    var asis = octaveGuard(w, binHz, pk*binHz, fMax*1.05);
+    consider(down, hps[kr]);
+    if(Math.abs(down - asis) >= 0.02*asis) consider(asis, hps[kr]);
+  }
+
+  /* A ladder that has passed the gates leaves one question open: which rung is
+     the bottom. "Is there a comb here at all" is the wrong question to ask of
+     a sub-multiple of a comb already believed, and it is the question that
+     fails under wind, where the fundamental is plainly visible but the added
+     partials either side of it are buried. So offer the sub-multiple on the
+     strength of its own peak, weak comb and all, and leave the choice to the
+     tracker, which can weigh it against the rest of its ladder over time. */
+  var proposed = cands.length;
+  for(i = 0; i < proposed; i++){
+    for(var d2 = 2; d2 <= 3; d2++){
+      var fs = cands[i].f/d2;
+      if(fs < fFloor) continue;
+      if(!partialPresent(w, binHz, fs, LONE_FUND)) continue;
+      var dupe = false;
+      for(j = 0; j < cands.length; j++) if(Math.abs(cands[j].f - fs) < 0.02*fs){ dupe = true; break; }
+      if(dupe || combQuality(w, binHz, fs, 6) < 4) continue;
+      /* The partials this rung ADDS must hold up against the ones it shares
+         with the ladder above, or it is not the bottom of anything - it is the
+         gaps of a real comb being filled in by a second machine standing
+         nearby, which is how a reading ends up halved. Reuse the octave guard:
+         if it wants to fold this straight back up, do not offer it at all. */
+      if(Math.abs(octaveGuard(w, binHz, fs, fMax*1.05) - fs) >= 0.02*fs) continue;
+      cands.push({ f:refine(w, binHz, fs, 5), comb:combStrength(w, binHz, fs, 6),
+                   snr:cands[i].snr, score:cands[i].score });
+    }
   }
   return { cands:cands, w:w, best:best };
 }
@@ -602,25 +645,92 @@ function updateTracks(cands, now){
   }
 }
 
-/* The head is the lowest well-formed comb, but only among the ones that have
-   earned belief. The expected range is a preference, never a filter - a head
-   below it still gets reported, just with less weight. */
-function chooseTrack(blades, rpmMin, rpmMax){
-  var elig = [], i, t, rpm;
-  for(i = 0; i < tracks.length; i++){
-    t = tracks[i];
-    if(t.hits < MIN_HITS || t.comb < 9) continue;
-    rpm = 60*t.f/blades;
-    t.rank = ((rpm >= rpmMin && rpm <= rpmMax) ? 1 : 0.4)
-           * Math.min(1, t.comb/26) * Math.min(1, t.hits/12);
-    elig.push(t);
+/* ------------------------------------------------------------- families
+   "The head is the lowest well-formed comb" is a statement about one rotor's
+   own harmonics: the ladder above the head belongs to the head. Applied to
+   every track at once it says something quite different - that whatever is
+   lowest in the field wins - and a generator, an idling engine or a vehicle
+   is usually lower than a head. That is how a machine on the ground takes
+   over the readout while the helicopter it is parked next to is ignored.
+   So tracks that sit on one ladder are folded into one source first, and only
+   then does lowest-wins apply, inside that source. Between separate sources
+   it is the better-formed comb that wins, not the lower one. */
+var FAMILY_TOL = 0.02, FAMILY_MAX_M = 8, SUBHARM_MARGIN = 12;
+
+function sameFamily(lo, hi){
+  var r = hi/lo, m = Math.round(r);
+  return m >= 2 && m <= FAMILY_MAX_M && Math.abs(r - m) <= FAMILY_TOL*m;
+}
+
+/* Fold eligible tracks onto their fundamentals.
+   Which rung of the ladder is the head cannot be settled on comb strength
+   alone: a second machine nearby fills the gaps between the rotor's harmonics
+   with its own, so the rotor's half or third scores just as well as the rotor.
+   The band the pilot says their head runs in does settle it, and it is the one
+   piece of information here that no amount of noise can corrupt. So the root
+   is the lowest member inside that band, and only when no member is in the
+   band does it fall back to the lowest well-formed one - a head outside the
+   band is still reported, as it always was, just never preferred over one
+   inside it. */
+function families(elig, blades, rpmMin, rpmMax){
+  var fams = [], i, j, placed;
+  var byF = elig.slice().sort(function(a, b){ return a.f - b.f; });
+  for(i = 0; i < byF.length; i++){
+    placed = false;
+    for(j = 0; j < fams.length; j++)
+      if(sameFamily(fams[j][0].f, byF[i].f)){ fams[j].push(byF[i]); placed = true; break; }
+    if(!placed) fams.push([byF[i]]);
   }
-  if(!elig.length) return null;
-  var top = 0;
-  for(i = 0; i < elig.length; i++) if(elig[i].rank > top) top = elig[i].rank;
-  var good = elig.filter(function(x){ return x.rank >= top*0.75; });
-  good.sort(function(a, b){ return a.f - b.f; });
-  return good[0];
+  var roots = [];
+  for(j = 0; j < fams.length; j++){
+    var mem = fams[j], bestComb = 0, bestHits = 0, root = null, rpm;
+    for(i = 0; i < mem.length; i++){
+      if(mem[i].comb > bestComb) bestComb = mem[i].comb;
+      if(mem[i].hits > bestHits) bestHits = mem[i].hits;
+    }
+    for(i = 0; i < mem.length; i++){
+      rpm = 60*mem[i].f/blades;
+      if(rpm >= rpmMin && rpm <= rpmMax && mem[i].comb >= bestComb - SUBHARM_MARGIN){ root = mem[i]; break; }
+    }
+    if(!root)
+      for(i = 0; i < mem.length; i++)
+        if(mem[i].comb >= bestComb - SUBHARM_MARGIN){ root = mem[i]; break; }
+    if(!root) continue;
+    /* A harmonic that has been believed for a while is evidence that the
+       source has been there that long. Wind and road noise sit low and swamp
+       the fundamental while leaving the upper ladder clear, so without this
+       the head flickers in and out and the detector settles on twice it. */
+    root.hits = Math.min(40, Math.max(root.hits, bestHits));
+    root.famComb = bestComb;
+    roots.push(root);
+  }
+  return roots;
+}
+
+/* The expected range is a preference, never a filter - a head below it still
+   gets reported, just with less weight. */
+function chooseTrack(blades, rpmMin, rpmMax){
+  var i, t, rpm, best = null;
+  if(!tracks.length) return null;
+
+  /* The "is this a comb at all" test belongs to the source, not to each rung
+     of it. A fundamental sitting under the wind can look thin on its own while
+     the ladder above it is unmistakable, and judging the rungs separately
+     throws the fundamental away and keeps its octave. */
+  var roots = families(tracks, blades, rpmMin, rpmMax);
+  for(i = 0; i < roots.length; i++){
+    t = roots[i];
+    if(t.hits < MIN_HITS || t.famComb < 9) continue;
+    rpm = 60*t.f/blades;
+    /* comb strength is deliberately not capped: between two sources that have
+       both earned belief, how well-formed the comb is is the whole question,
+       and capping it threw that away and handed the decision to whichever
+       happened to be lower. */
+    t.rank = ((rpm >= rpmMin && rpm <= rpmMax) ? 1 : 0.4)
+           * (t.comb/26) * Math.min(1, t.hits/12);
+    if(!best || t.rank > best.rank) best = t;
+  }
+  return best;
 }
 
 function median(arr){
