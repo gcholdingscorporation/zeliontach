@@ -3,3 +3,7 @@ android/build/
 android/app/build/
 android/.gradle/
 android/local.properties
+
+# Audio conversions derived from the committed originals
+test/recordings/*.converted.wav
+test/recordings/probe.wav

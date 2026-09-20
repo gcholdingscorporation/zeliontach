@@ -1,0 +1,451 @@
+{
+  "version": 1,
+  "description": "Real recordings with measured head speeds. This is the matrix that decides whether a detection change was an improvement; matrix/synthetic.json can only say whether it was a regression. Every case below is declared but not yet captured - a case whose audio file is not in the tree reports 'awaiting audio' and does not fail the run, so this file is the capture checklist. See CAPTURING.md, and in particular what counts as ground truth. band is the app's shipped default of 1000-6000 rpm; set it per case to whatever the app is actually set to for that aircraft.",
+  "cases": [
+    {
+      "id": "field-close-still-01",
+      "kind": "recording",
+      "tags": [
+        "field",
+        "close",
+        "still"
+      ],
+      "audio": "recordings/field-close-still-01.m4a",
+      "truth": {
+        "rpm": null,
+        "blades": 2,
+        "source": null
+      },
+      "conditions": {
+        "distance_m": 20,
+        "wind": "still",
+        "background": "quiet ground, no traffic",
+        "device": null,
+        "notes": "close in, calm - the easiest capture there is, and the one that says whether anything works at all"
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      }
+    },
+    {
+      "id": "field-close-still-02",
+      "kind": "recording",
+      "tags": [
+        "field",
+        "close",
+        "still"
+      ],
+      "audio": "recordings/field-close-still-02.m4a",
+      "truth": {
+        "rpm": null,
+        "blades": 2,
+        "source": null
+      },
+      "conditions": {
+        "distance_m": 20,
+        "wind": "still",
+        "background": "quiet ground, no traffic",
+        "device": null,
+        "notes": "second take of the same conditions, so one clip is never the whole row"
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      }
+    },
+    {
+      "id": "field-mid-still-01",
+      "kind": "recording",
+      "tags": [
+        "field",
+        "mid",
+        "still"
+      ],
+      "audio": "recordings/field-mid-still-01.m4a",
+      "truth": {
+        "rpm": null,
+        "blades": 2,
+        "source": null
+      },
+      "conditions": {
+        "distance_m": 75,
+        "wind": "still",
+        "background": "quiet ground",
+        "device": null,
+        "notes": "mid distance, calm"
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      }
+    },
+    {
+      "id": "field-mid-breezy-01",
+      "kind": "recording",
+      "tags": [
+        "field",
+        "mid",
+        "wind"
+      ],
+      "audio": "recordings/field-mid-breezy-01.m4a",
+      "truth": {
+        "rpm": null,
+        "blades": 2,
+        "source": null
+      },
+      "conditions": {
+        "distance_m": 75,
+        "wind": "breezy, no shield on the mic",
+        "background": "open ground",
+        "device": null,
+        "notes": "the first capture where wind is doing something"
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      }
+    },
+    {
+      "id": "field-mid-breezy-02",
+      "kind": "recording",
+      "tags": [
+        "field",
+        "mid",
+        "wind"
+      ],
+      "audio": "recordings/field-mid-breezy-02.m4a",
+      "truth": {
+        "rpm": null,
+        "blades": 2,
+        "source": null
+      },
+      "conditions": {
+        "distance_m": 75,
+        "wind": "breezy, foam shield on the mic",
+        "background": "open ground",
+        "device": null,
+        "notes": "same conditions as the take above, shielded - run back to back so the pair is comparable"
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      }
+    },
+    {
+      "id": "field-mid-windy-01",
+      "kind": "recording",
+      "tags": [
+        "field",
+        "mid",
+        "wind"
+      ],
+      "audio": "recordings/field-mid-windy-01.m4a",
+      "truth": {
+        "rpm": null,
+        "blades": 2,
+        "source": null
+      },
+      "conditions": {
+        "distance_m": 75,
+        "wind": "strong enough to roar on the mic",
+        "background": "open ground",
+        "device": null,
+        "notes": "wind loud enough to be the loudest thing in the clip"
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      }
+    },
+    {
+      "id": "field-mid-windy-02",
+      "kind": "recording",
+      "tags": [
+        "field",
+        "mid",
+        "wind"
+      ],
+      "audio": "recordings/field-mid-windy-02.m4a",
+      "truth": {
+        "rpm": null,
+        "blades": 2,
+        "source": null
+      },
+      "conditions": {
+        "distance_m": 75,
+        "wind": "strong enough to roar on the mic",
+        "background": "open ground",
+        "device": null,
+        "notes": "second take in roaring wind"
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      }
+    },
+    {
+      "id": "field-far-still-01",
+      "kind": "recording",
+      "tags": [
+        "field",
+        "far",
+        "still"
+      ],
+      "audio": "recordings/field-far-still-01.m4a",
+      "truth": {
+        "rpm": null,
+        "blades": 2,
+        "source": null
+      },
+      "conditions": {
+        "distance_m": 250,
+        "wind": "still",
+        "background": "quiet ground",
+        "device": null,
+        "notes": "far enough that the rotor is faint"
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      }
+    },
+    {
+      "id": "field-far-breezy-01",
+      "kind": "recording",
+      "tags": [
+        "field",
+        "far",
+        "wind"
+      ],
+      "audio": "recordings/field-far-breezy-01.m4a",
+      "truth": {
+        "rpm": null,
+        "blades": 2,
+        "source": null
+      },
+      "conditions": {
+        "distance_m": 250,
+        "wind": "breezy",
+        "background": "open ground",
+        "device": null,
+        "notes": "faint and windy at once - the hardest honest case"
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      }
+    },
+    {
+      "id": "field-mid-traffic-01",
+      "kind": "recording",
+      "tags": [
+        "field",
+        "mid",
+        "ambient"
+      ],
+      "audio": "recordings/field-mid-traffic-01.m4a",
+      "truth": {
+        "rpm": null,
+        "blades": 2,
+        "source": null
+      },
+      "conditions": {
+        "distance_m": 75,
+        "wind": "light",
+        "background": "road traffic audible throughout",
+        "device": null,
+        "notes": "broadband ambient that is not wind"
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      }
+    },
+    {
+      "id": "field-mid-machinery-01",
+      "kind": "recording",
+      "tags": [
+        "field",
+        "mid",
+        "ambient"
+      ],
+      "audio": "recordings/field-mid-machinery-01.m4a",
+      "truth": {
+        "rpm": null,
+        "blades": 2,
+        "source": null
+      },
+      "conditions": {
+        "distance_m": 75,
+        "wind": "light",
+        "background": "other machinery running nearby",
+        "device": null,
+        "notes": "a competing periodic source that is not a rotor"
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      }
+    },
+    {
+      "id": "field-mid-voices-01",
+      "kind": "recording",
+      "tags": [
+        "field",
+        "mid",
+        "ambient"
+      ],
+      "audio": "recordings/field-mid-voices-01.m4a",
+      "truth": {
+        "rpm": null,
+        "blades": 2,
+        "source": null
+      },
+      "conditions": {
+        "distance_m": 30,
+        "wind": "light",
+        "background": "people talking close to the mic",
+        "device": null,
+        "notes": "transients the tracker has to refuse to believe"
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      }
+    },
+    {
+      "id": "field-second-aircraft-01",
+      "kind": "recording",
+      "tags": [
+        "field",
+        "competitor"
+      ],
+      "audio": "recordings/field-second-aircraft-01.m4a",
+      "truth": {
+        "rpm": null,
+        "blades": 2,
+        "source": null
+      },
+      "conditions": {
+        "distance_m": 75,
+        "wind": "light",
+        "background": "a second aircraft audible at the same time",
+        "device": null,
+        "notes": "two real combs at once - the failure this detector works hardest to avoid"
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      }
+    },
+    {
+      "id": "field-spool-up-01",
+      "kind": "recording",
+      "tags": [
+        "field",
+        "transient"
+      ],
+      "audio": "recordings/field-spool-up-01.m4a",
+      "truth": {
+        "rpm": null,
+        "blades": 2,
+        "source": null
+      },
+      "conditions": {
+        "distance_m": 40,
+        "wind": "still",
+        "background": "quiet ground",
+        "device": null,
+        "notes": "head speed rising - needs truth.segments, or a tach filmed in the same take"
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      }
+    },
+    {
+      "id": "field-spool-down-01",
+      "kind": "recording",
+      "tags": [
+        "field",
+        "transient"
+      ],
+      "audio": "recordings/field-spool-down-01.m4a",
+      "truth": {
+        "rpm": null,
+        "blades": 2,
+        "source": null
+      },
+      "conditions": {
+        "distance_m": 40,
+        "wind": "still",
+        "background": "quiet ground",
+        "device": null,
+        "notes": "head speed falling"
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      }
+    },
+    {
+      "id": "field-no-rotor-windy-01",
+      "kind": "recording",
+      "tags": [
+        "field",
+        "negative"
+      ],
+      "audio": "recordings/field-no-rotor-windy-01.m4a",
+      "truth": {
+        "rpm": null,
+        "blades": 2,
+        "source": "no aircraft present"
+      },
+      "conditions": {
+        "distance_m": null,
+        "wind": "strong enough to roar on the mic",
+        "background": "open ground, no aircraft present",
+        "device": null,
+        "notes": "the right answer is nothing - set expect.must_lock false and must_not_lock_in_band true"
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      },
+      "expect": {
+        "must_lock": false,
+        "must_not_lock_in_band": true
+      }
+    },
+    {
+      "id": "field-no-rotor-traffic-01",
+      "kind": "recording",
+      "tags": [
+        "field",
+        "negative"
+      ],
+      "audio": "recordings/field-no-rotor-traffic-01.m4a",
+      "truth": {
+        "rpm": null,
+        "blades": 2,
+        "source": "no aircraft present"
+      },
+      "conditions": {
+        "distance_m": null,
+        "wind": "light",
+        "background": "road traffic, no aircraft present",
+        "device": null,
+        "notes": "the right answer is nothing"
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      },
+      "expect": {
+        "must_lock": false,
+        "must_not_lock_in_band": true
+      }
+    }
+  ]
+}

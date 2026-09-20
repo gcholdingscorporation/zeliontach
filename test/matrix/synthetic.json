@@ -1,0 +1,311 @@
+{
+  "version": 1,
+  "description": "Synthetic cases. These prove the harness measures what it claims and hold the detector's known failure shapes as regressions. They are not evidence that the detector works on real audio - only field/*.json can be that.",
+  "cases": [
+    {
+      "id": "synth-clean-2137",
+      "kind": "synthetic",
+      "tags": [
+        "synthetic",
+        "clean"
+      ],
+      "signal": {
+        "rpm": 2137,
+        "blades": 2,
+        "sampleRate": 48000,
+        "duration_s": 10,
+        "snr_db": 30,
+        "seed": 1001
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      },
+      "expect": {
+        "tol_rpm": 10,
+        "min_within_pct": 95,
+        "max_final_error_rpm": 80,
+        "lock_within_s": 3
+      },
+      "goal": "0 rpm error throughout; a long clean lock currently wanders ~3% in its last second"
+    },
+    {
+      "id": "synth-clean-1450",
+      "kind": "synthetic",
+      "tags": [
+        "synthetic",
+        "clean"
+      ],
+      "signal": {
+        "rpm": 1450,
+        "blades": 2,
+        "sampleRate": 48000,
+        "duration_s": 10,
+        "snr_db": 30,
+        "seed": 1002
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      },
+      "expect": {
+        "tol_rpm": 10,
+        "min_within_pct": 98,
+        "max_final_error_rpm": 10,
+        "lock_within_s": 3
+      }
+    },
+    {
+      "id": "synth-clean-5200-3blade",
+      "kind": "synthetic",
+      "tags": [
+        "synthetic",
+        "clean"
+      ],
+      "signal": {
+        "rpm": 5200,
+        "blades": 3,
+        "sampleRate": 48000,
+        "duration_s": 10,
+        "snr_db": 30,
+        "seed": 1003
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      },
+      "expect": {
+        "tol_rpm": 10,
+        "min_within_pct": 98,
+        "max_final_error_rpm": 10,
+        "lock_within_s": 3
+      }
+    },
+    {
+      "id": "synth-noisy-6db-2137",
+      "kind": "synthetic",
+      "tags": [
+        "synthetic",
+        "noisy"
+      ],
+      "signal": {
+        "rpm": 2137,
+        "blades": 2,
+        "sampleRate": 48000,
+        "duration_s": 12,
+        "snr_db": 6,
+        "seed": 2001
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      },
+      "expect": {
+        "tol_rpm": 50,
+        "min_within_pct": 90
+      }
+    },
+    {
+      "id": "synth-noisy-0db-2137",
+      "kind": "synthetic",
+      "tags": [
+        "synthetic",
+        "noisy"
+      ],
+      "signal": {
+        "rpm": 2137,
+        "blades": 2,
+        "sampleRate": 48000,
+        "duration_s": 12,
+        "snr_db": 0,
+        "seed": 2002
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      },
+      "expect": {
+        "tol_rpm": 50,
+        "min_within_pct": 90
+      }
+    },
+    {
+      "id": "synth-wind-2137",
+      "kind": "synthetic",
+      "tags": [
+        "synthetic",
+        "wind"
+      ],
+      "signal": {
+        "rpm": 2137,
+        "blades": 2,
+        "sampleRate": 48000,
+        "duration_s": 12,
+        "snr_db": 10,
+        "wind_db": 6,
+        "seed": 3001
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      },
+      "expect": {
+        "tol_rpm": 50,
+        "min_within_pct": 90
+      }
+    },
+    {
+      "id": "synth-wind-heavy-1800",
+      "kind": "synthetic",
+      "tags": [
+        "synthetic",
+        "wind"
+      ],
+      "signal": {
+        "rpm": 1800,
+        "blades": 2,
+        "sampleRate": 48000,
+        "duration_s": 12,
+        "snr_db": 6,
+        "wind_db": 14,
+        "seed": 3002
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      },
+      "expect": {
+        "tol_rpm": 50,
+        "min_within_pct": 12,
+        "max_final_error_rpm": 50
+      },
+      "goal": "90% of readings within 50 rpm - today it settles correctly but wanders badly on the way"
+    },
+    {
+      "id": "synth-competitor-tail-2137",
+      "kind": "synthetic",
+      "tags": [
+        "synthetic",
+        "competitor"
+      ],
+      "signal": {
+        "rpm": 2137,
+        "blades": 2,
+        "sampleRate": 48000,
+        "duration_s": 12,
+        "snr_db": 12,
+        "seed": 4001,
+        "competitors": [
+          {
+            "rpm": 4600,
+            "blades": 2,
+            "level_db": -4
+          }
+        ]
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      },
+      "expect": {
+        "tol_rpm": 50,
+        "min_within_pct": 90
+      }
+    },
+    {
+      "id": "synth-competitor-louder-2137",
+      "kind": "synthetic",
+      "tags": [
+        "synthetic",
+        "competitor"
+      ],
+      "signal": {
+        "rpm": 2137,
+        "blades": 2,
+        "sampleRate": 48000,
+        "duration_s": 12,
+        "snr_db": 12,
+        "seed": 4002,
+        "competitors": [
+          {
+            "rpm": 3700,
+            "blades": 2,
+            "level_db": 3
+          }
+        ]
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      },
+      "expect": {
+        "tol_rpm": 50,
+        "min_within_pct": 85
+      }
+    },
+    {
+      "id": "synth-spool-1200-2400",
+      "kind": "synthetic",
+      "tags": [
+        "synthetic",
+        "transient"
+      ],
+      "signal": {
+        "rpm": 1800,
+        "blades": 2,
+        "sampleRate": 48000,
+        "duration_s": 14,
+        "snr_db": 14,
+        "seed": 5001,
+        "spool": {
+          "from": 1200,
+          "to": 2400
+        }
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      },
+      "truth": {
+        "blades": 2,
+        "segments": [
+          {
+            "from_s": 4,
+            "to_s": 13,
+            "rpm": 1800
+          }
+        ]
+      },
+      "expect": {
+        "tol_rpm": 400,
+        "min_within_pct": 70
+      }
+    },
+    {
+      "id": "synth-silence-nothing-to-find",
+      "kind": "synthetic",
+      "tags": [
+        "synthetic",
+        "negative"
+      ],
+      "signal": {
+        "rpm": 2137,
+        "blades": 2,
+        "sampleRate": 48000,
+        "duration_s": 10,
+        "snr_db": -40,
+        "wind_db": 20,
+        "seed": 6001
+      },
+      "band": {
+        "rpmMin": 1000,
+        "rpmMax": 6000
+      },
+      "expect": {
+        "must_lock": false,
+        "must_not_lock_in_band": true
+      },
+      "goal": "report nothing at all; today it reports a sub-band figure driven by the wind's own low-frequency energy"
+    }
+  ]
+}

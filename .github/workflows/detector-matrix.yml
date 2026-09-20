@@ -1,0 +1,37 @@
+name: Detector matrix
+
+on:
+  push:
+    paths:
+      - 'index.html'
+      - 'test/**'
+      - '.github/workflows/detector-matrix.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'test/**'
+  workflow_dispatch:
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Phone recordings arrive as .m4a; the harness converts them once.
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Run the matrix
+        run: node test/run.js --json=matrix-results.json
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: detector-matrix-results
+          path: matrix-results.json
