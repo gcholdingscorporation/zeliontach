@@ -12,8 +12,12 @@ android {
         // this project ship without any binary image assets.
         minSdk 26
         targetSdk 34
-        versionCode 1
-        versionName '1.0'
+        // A tag release overrides both: the Release APK workflow turns v1.2.3
+        // into versionName 1.2.3 and a versionCode derived from it, so each
+        // release upgrades the one before it in place. A plain local or CI
+        // build, with neither variable set, keeps 1 and 1.0 as before.
+        versionCode Integer.parseInt(System.getenv('ZELION_VERSION_CODE') ?: '1')
+        versionName(System.getenv('ZELION_VERSION_NAME') ?: '1.0')
     }
 
     // A throwaway key committed alongside the project, so that successive
@@ -26,6 +30,21 @@ android {
             keyAlias 'sideload'
             keyPassword 'rotorflight'
         }
+
+        // The real publishing key, which exists only while a tag release is
+        // building: the workflow decodes it from repository secrets into a
+        // temporary file and passes the path and passwords through the
+        // environment. Nothing about it is committed, and when the
+        // environment is empty this config stays unconfigured and unused.
+        publish {
+            def keystore = System.getenv('ZELION_KEYSTORE_FILE')
+            if (keystore) {
+                storeFile file(keystore)
+                storePassword System.getenv('ZELION_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ZELION_KEY_ALIAS')
+                keyPassword System.getenv('ZELION_KEY_PASSWORD')
+            }
+        }
     }
 
     buildTypes {
@@ -33,7 +52,9 @@ android {
             signingConfig signingConfigs.sideload
         }
         release {
-            signingConfig signingConfigs.sideload
+            signingConfig(System.getenv('ZELION_KEYSTORE_FILE')
+                    ? signingConfigs.publish
+                    : signingConfigs.sideload)
             minifyEnabled false
         }
     }

@@ -134,6 +134,39 @@ which is why this exists as a standalone page rather than only as an embed.
 
 Add to home screen for a full-screen, offline-capable install.
 
+## Releases
+
+Pushing a tag of the form `v1.2.3` builds a signed APK and attaches it to a
+GitHub Release, so a build stays downloadable instead of expiring with the
+`Build APK` workflow's artifacts:
+
+    git tag v1.0.0 && git push origin v1.0.0
+
+The release is signed with a real key that is never committed. Before the first
+tag, create a keystore and put it in the repository's Actions secrets
+(**Settings -> Secrets and variables -> Actions**):
+
+    keytool -genkeypair -v -keystore release.jks -alias zeliontach \
+            -keyalg RSA -keysize 2048 -validity 10000
+    base64 -w0 release.jks        # macOS: base64 -i release.jks
+
+| Secret | Value |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | the base64 line printed above |
+| `ANDROID_KEYSTORE_PASSWORD` | the store password |
+| `ANDROID_KEY_ALIAS` | the alias, `zeliontach` above |
+| `ANDROID_KEY_PASSWORD` | the key password |
+
+Keep `release.jks` somewhere safe and offline, and never commit it. Every
+future release has to be signed with the same key, or an installed copy cannot
+be upgraded in place — it has to be uninstalled first, losing its settings.
+
+A tag with a suffix — `v1.1.0-beta1` — is published as a prerelease, and the
+release that follows it upgrades it in place. `versionName` comes from the tag;
+`versionCode` is derived from it so it always increases. A build with no tag
+behind it, from `Build APK`, is still signed with the committed throwaway
+`sideload.keystore` and is not a release.
+
 ## Not an airworthiness instrument
 
 This is a tuning aid for RC models. It is uncertified, it can be fooled by a
