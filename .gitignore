@@ -6,4 +6,6 @@ android/local.properties
 
 # Audio conversions derived from the committed originals
 test/recordings/*.converted.wav
+test/recordings/*.converted.*.wav
 test/recordings/probe.wav
+test/recordings/probe_*

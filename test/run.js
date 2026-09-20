@@ -50,18 +50,47 @@ function truthAt(truth, t){
 }
 
 /* --------------------------------------------------------------- audio */
-function toWav(file){
-  /* Phones record m4a. Converting once, out loud, beats an implicit decode
-     that behaves differently on every machine. */
-  const wav = path.join(path.dirname(file), path.basename(file).replace(/\.[^.]+$/, "") + ".converted.wav");
+/* Which channel of a stereo source to keep.
+   Phones do not record video in plain stereo. Two or three mics are combined
+   into a stereo pair by the handset's own processing, and what that processing
+   does to a steady low-frequency tone is not something to assume - it may
+   steer, it may suppress, and averaging the pair can partly cancel whatever it
+   did. So the choice is a per-case setting, and a case that matters is worth
+   running both ways. */
+const PAN = {
+  mix:   ["-ac", "1"],
+  left:  ["-af", "pan=mono|c0=c0"],
+  right: ["-af", "pan=mono|c0=c1"]
+};
+
+function toWav(file, channel){
+  /* Phones record m4a, and film video as AAC in an mp4 or a mov. Converting
+     once, out loud, beats an implicit decode that behaves differently on every
+     machine. -vn drops any video stream; the audio track is all this wants. */
+  if(!PAN[channel]) throw new Error("audio_channel must be mix, left or right, got '" + channel + "'");
+  const suffix = channel === "mix" ? ".converted.wav" : ".converted." + channel + ".wav";
+  const wav = path.join(path.dirname(file), path.basename(file).replace(/\.[^.]+$/, "") + suffix);
   if(fs.existsSync(wav)) return wav;
+  const argv = ["-v", "error", "-y", "-i", file, "-vn"].concat(PAN[channel], ["-c:a", "pcm_s16le", wav]);
   try{
-    execFileSync("ffmpeg", ["-v", "error", "-y", "-i", file, "-ac", "1", "-c:a", "pcm_s16le", wav], { stdio: "pipe" });
+    execFileSync("ffmpeg", argv, { stdio: "pipe" });
   }catch(e){
     throw new Error("cannot read " + path.basename(file) + ": it is not a WAV and ffmpeg is not installed. Convert it first:\n" +
-                    "    ffmpeg -i " + file + " -ac 1 -c:a pcm_s16le " + wav);
+                    "    ffmpeg " + argv.join(" "));
   }
   return wav;
+}
+
+/* Take a window out of a longer source. A video of a flight is minutes long
+   and the aircraft is only in it for part of that, at a distance that changes
+   while it is - so one file is several cases, each naming its own seconds. */
+function clipAudio(a, clip){
+  if(!clip) return a;
+  const from = Math.max(0, Math.round((clip.from_s || 0) * a.sampleRate));
+  const to = clip.to_s == null ? a.samples.length : Math.min(a.samples.length, Math.round(clip.to_s * a.sampleRate));
+  if(to <= from) throw new Error("clip " + JSON.stringify(clip) + " selects nothing from a " + a.duration.toFixed(1) + "s source");
+  const samples = a.samples.subarray(from, to);
+  return { samples, sampleRate: a.sampleRate, channels: a.channels, duration: samples.length / a.sampleRate };
 }
 
 function audioFor(c){
@@ -69,8 +98,8 @@ function audioFor(c){
   if(c.kind !== "recording") throw new Error("case " + c.id + ": unknown kind '" + c.kind + "'");
   let file = path.resolve(ROOT, c.audio);
   if(!fs.existsSync(file)) return null;              /* declared but not captured yet */
-  if(!/\.wav$/i.test(file)) file = toWav(file);
-  return decodeWav(file);
+  if(!/\.wav$/i.test(file)) file = toWav(file, c.audio_channel || "mix");
+  return clipAudio(decodeWav(file), c.clip);
 }
 
 /* ----------------------------------------------------------------- run */

@@ -11,7 +11,8 @@ node test/run.js --json=out.json    # results as JSON as well
 node test/run.js --hop-ms=16        # analyse more often (slower, closer to 60 fps)
 ```
 
-No dependencies. Node 18 or newer.
+No dependencies. Node 18 or newer. ffmpeg is needed only for sources that are
+not already WAV — a phone's `.m4a`, or the audio track of an `.mp4` or `.mov`.
 
 ## How it works
 
@@ -59,7 +60,9 @@ counts as ground truth.
 | --- | --- |
 | `id` | unique; also what `--filter` matches |
 | `kind` | `recording` (a file) or `synthetic` (generated) |
-| `audio` | path relative to `test/`, for `recording` |
+| `audio` | path relative to `test/`, for `recording` — wav, m4a, mp4 or mov |
+| `clip` | `{ from_s, to_s }`: take one window out of a longer file |
+| `audio_channel` | `mix` (default), `left` or `right`, for a stereo source |
 | `signal` | generator parameters, for `synthetic` |
 | `truth.rpm` | the known head speed; or `truth.segments` for a clip that changes |
 | `truth.source` | how that head speed was measured — required for a real capture |

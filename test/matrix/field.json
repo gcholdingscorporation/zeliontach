@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Real recordings with measured head speeds. This is the matrix that decides whether a detection change was an improvement; matrix/synthetic.json can only say whether it was a regression. Every case below is declared but not yet captured - a case whose audio file is not in the tree reports 'awaiting audio' and does not fail the run, so this file is the capture checklist. See CAPTURING.md, and in particular what counts as ground truth. band is the app's shipped default of 1000-6000 rpm; set it per case to whatever the app is actually set to for that aircraft.",
+  "description": "Real recordings with measured head speeds. This is the matrix that decides whether a detection change was an improvement; matrix/synthetic.json can only say whether it was a regression. Every case below is declared but not yet captured - a case whose audio file is not in the tree reports 'awaiting audio' and does not fail the run, so this file is the capture checklist. Video is a first-class source: hand over the .mp4 or .mov and the harness takes its audio track, and a long flight becomes several cases by giving each its own clip window. Every case needs truth.tier filling in as well as truth.rpm - see CAPTURING.md, which explains why the tier is what sets a fair tolerance. band is the app's shipped default of 1000-6000 rpm; set it per case to whatever the app is actually set to for that aircraft.",
   "cases": [
     {
       "id": "field-close-still-01",
@@ -14,14 +14,16 @@
       "truth": {
         "rpm": null,
         "blades": 2,
-        "source": null
+        "source": null,
+        "tier": null
       },
       "conditions": {
         "distance_m": 20,
         "wind": "still",
         "background": "quiet ground, no traffic",
         "device": null,
-        "notes": "close in, calm - the easiest capture there is, and the one that says whether anything works at all"
+        "notes": "close in, calm - the easiest capture there is, and the one that says whether anything works at all",
+        "source_mode": null
       },
       "band": {
         "rpmMin": 1000,
@@ -40,14 +42,16 @@
       "truth": {
         "rpm": null,
         "blades": 2,
-        "source": null
+        "source": null,
+        "tier": null
       },
       "conditions": {
         "distance_m": 20,
         "wind": "still",
         "background": "quiet ground, no traffic",
         "device": null,
-        "notes": "second take of the same conditions, so one clip is never the whole row"
+        "notes": "second take of the same conditions, so one clip is never the whole row",
+        "source_mode": null
       },
       "band": {
         "rpmMin": 1000,
@@ -66,14 +70,16 @@
       "truth": {
         "rpm": null,
         "blades": 2,
-        "source": null
+        "source": null,
+        "tier": null
       },
       "conditions": {
         "distance_m": 75,
         "wind": "still",
         "background": "quiet ground",
         "device": null,
-        "notes": "mid distance, calm"
+        "notes": "mid distance, calm",
+        "source_mode": null
       },
       "band": {
         "rpmMin": 1000,
@@ -92,14 +98,16 @@
       "truth": {
         "rpm": null,
         "blades": 2,
-        "source": null
+        "source": null,
+        "tier": null
       },
       "conditions": {
         "distance_m": 75,
         "wind": "breezy, no shield on the mic",
         "background": "open ground",
         "device": null,
-        "notes": "the first capture where wind is doing something"
+        "notes": "the first capture where wind is doing something",
+        "source_mode": null
       },
       "band": {
         "rpmMin": 1000,
@@ -118,14 +126,16 @@
       "truth": {
         "rpm": null,
         "blades": 2,
-        "source": null
+        "source": null,
+        "tier": null
       },
       "conditions": {
         "distance_m": 75,
         "wind": "breezy, foam shield on the mic",
         "background": "open ground",
         "device": null,
-        "notes": "same conditions as the take above, shielded - run back to back so the pair is comparable"
+        "notes": "same conditions as the take above, shielded - run back to back so the pair is comparable",
+        "source_mode": null
       },
       "band": {
         "rpmMin": 1000,
@@ -144,14 +154,16 @@
       "truth": {
         "rpm": null,
         "blades": 2,
-        "source": null
+        "source": null,
+        "tier": null
       },
       "conditions": {
         "distance_m": 75,
         "wind": "strong enough to roar on the mic",
         "background": "open ground",
         "device": null,
-        "notes": "wind loud enough to be the loudest thing in the clip"
+        "notes": "wind loud enough to be the loudest thing in the clip, taken with the plain audio recorder",
+        "source_mode": "voice recorder - plain audio, no video mode"
       },
       "band": {
         "rpmMin": 1000,
@@ -170,14 +182,16 @@
       "truth": {
         "rpm": null,
         "blades": 2,
-        "source": null
+        "source": null,
+        "tier": null
       },
       "conditions": {
         "distance_m": 75,
         "wind": "strong enough to roar on the mic",
         "background": "open ground",
         "device": null,
-        "notes": "second take in roaring wind"
+        "notes": "the same conditions as field-mid-windy-01, filmed back to back with it. If the two disagree, the phone's video mode is suppressing wind and the footage is flattering the detector",
+        "source_mode": "video - filmed, ideally with a tach in frame"
       },
       "band": {
         "rpmMin": 1000,
@@ -196,14 +210,16 @@
       "truth": {
         "rpm": null,
         "blades": 2,
-        "source": null
+        "source": null,
+        "tier": null
       },
       "conditions": {
         "distance_m": 250,
         "wind": "still",
         "background": "quiet ground",
         "device": null,
-        "notes": "far enough that the rotor is faint"
+        "notes": "far enough that the rotor is faint",
+        "source_mode": null
       },
       "band": {
         "rpmMin": 1000,
@@ -222,14 +238,16 @@
       "truth": {
         "rpm": null,
         "blades": 2,
-        "source": null
+        "source": null,
+        "tier": null
       },
       "conditions": {
         "distance_m": 250,
         "wind": "breezy",
         "background": "open ground",
         "device": null,
-        "notes": "faint and windy at once - the hardest honest case"
+        "notes": "faint and windy at once - the hardest honest case",
+        "source_mode": null
       },
       "band": {
         "rpmMin": 1000,
@@ -248,14 +266,16 @@
       "truth": {
         "rpm": null,
         "blades": 2,
-        "source": null
+        "source": null,
+        "tier": null
       },
       "conditions": {
         "distance_m": 75,
         "wind": "light",
         "background": "road traffic audible throughout",
         "device": null,
-        "notes": "broadband ambient that is not wind"
+        "notes": "broadband ambient that is not wind",
+        "source_mode": null
       },
       "band": {
         "rpmMin": 1000,
@@ -274,14 +294,16 @@
       "truth": {
         "rpm": null,
         "blades": 2,
-        "source": null
+        "source": null,
+        "tier": null
       },
       "conditions": {
         "distance_m": 75,
         "wind": "light",
         "background": "other machinery running nearby",
         "device": null,
-        "notes": "a competing periodic source that is not a rotor"
+        "notes": "a competing periodic source that is not a rotor",
+        "source_mode": null
       },
       "band": {
         "rpmMin": 1000,
@@ -300,14 +322,16 @@
       "truth": {
         "rpm": null,
         "blades": 2,
-        "source": null
+        "source": null,
+        "tier": null
       },
       "conditions": {
         "distance_m": 30,
         "wind": "light",
         "background": "people talking close to the mic",
         "device": null,
-        "notes": "transients the tracker has to refuse to believe"
+        "notes": "transients the tracker has to refuse to believe",
+        "source_mode": null
       },
       "band": {
         "rpmMin": 1000,
@@ -325,14 +349,16 @@
       "truth": {
         "rpm": null,
         "blades": 2,
-        "source": null
+        "source": null,
+        "tier": null
       },
       "conditions": {
         "distance_m": 75,
         "wind": "light",
         "background": "a second aircraft audible at the same time",
         "device": null,
-        "notes": "two real combs at once - the failure this detector works hardest to avoid"
+        "notes": "two real combs at once - the failure this detector works hardest to avoid",
+        "source_mode": null
       },
       "band": {
         "rpmMin": 1000,
@@ -350,14 +376,16 @@
       "truth": {
         "rpm": null,
         "blades": 2,
-        "source": null
+        "source": null,
+        "tier": null
       },
       "conditions": {
         "distance_m": 40,
         "wind": "still",
         "background": "quiet ground",
         "device": null,
-        "notes": "head speed rising - needs truth.segments, or a tach filmed in the same take"
+        "notes": "head speed rising - needs truth.segments, or a tach filmed in the same take",
+        "source_mode": null
       },
       "band": {
         "rpmMin": 1000,
@@ -375,14 +403,16 @@
       "truth": {
         "rpm": null,
         "blades": 2,
-        "source": null
+        "source": null,
+        "tier": null
       },
       "conditions": {
         "distance_m": 40,
         "wind": "still",
         "background": "quiet ground",
         "device": null,
-        "notes": "head speed falling"
+        "notes": "head speed falling",
+        "source_mode": null
       },
       "band": {
         "rpmMin": 1000,
@@ -400,14 +430,16 @@
       "truth": {
         "rpm": null,
         "blades": 2,
-        "source": "no aircraft present"
+        "source": "no aircraft present",
+        "tier": "n/a - no rotor present"
       },
       "conditions": {
         "distance_m": null,
         "wind": "strong enough to roar on the mic",
         "background": "open ground, no aircraft present",
         "device": null,
-        "notes": "the right answer is nothing - set expect.must_lock false and must_not_lock_in_band true"
+        "notes": "the right answer is nothing - set expect.must_lock false and must_not_lock_in_band true",
+        "source_mode": null
       },
       "band": {
         "rpmMin": 1000,
@@ -429,14 +461,16 @@
       "truth": {
         "rpm": null,
         "blades": 2,
-        "source": "no aircraft present"
+        "source": "no aircraft present",
+        "tier": "n/a - no rotor present"
       },
       "conditions": {
         "distance_m": null,
         "wind": "light",
         "background": "road traffic, no aircraft present",
         "device": null,
-        "notes": "the right answer is nothing"
+        "notes": "the right answer is nothing",
+        "source_mode": null
       },
       "band": {
         "rpmMin": 1000,
