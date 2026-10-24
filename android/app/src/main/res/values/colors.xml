@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sampled from the Zelion Power flight dashboard. -->
+<resources>
+    <color name="ic_launcher_background">#090F23</color>
+    <color name="zelion_green">#8BE04A</color>
+    <color name="tach_ground">#060A18</color>
+    <color name="tach_ground_night">#060A18</color>
+</resources>

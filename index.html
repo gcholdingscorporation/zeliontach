@@ -1,0 +1,1328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#090F23">
+<meta name="description" content="Acoustic tachometer for RC helicopter head speed, 1000-6000 rpm, read from the phone microphone.">
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Zelion Tach">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<style>
+html{color-scheme:dark;background:#060A18}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;font:15px "Open Sans",system-ui,sans-serif}
+img{max-width:100%}
+[hidden]{display:none!important}
+</style>
+<title>Zelion Tach</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Open+Sans:wght@400;600;700;800&display=swap">
+<style>
+:root{
+  /* Sampled from the Zelion Power flight dashboard. This is a dark-committed
+     instrument, like the dashboard it belongs beside - there is no light theme
+     to fall out of step with it. Hex values marked (brand) came straight off
+     that screen; the rest are derived to sit with them. */
+  color-scheme:dark;
+  --bg:#060A18;
+  --surface:#090F23;        /* brand - the dashboard ground */
+  --surface-2:#0E1630;
+  --sunk:#04070F;
+  --ink:#FFFFFF;            /* brand - primary readouts */
+  --ink-2:#C2CBDA;
+  --ink-3:#94A3BE;          /* brand - panel labels */
+  --line:#233053;           /* brand - secondary panel borders */
+  --line-soft:#18203C;
+  --accent:#8BE04A;         /* brand - the Zelion green */
+  --accent-ink:#A9EA75;
+  --accent-on:#07120A;
+  --accent-soft:rgba(139,224,74,.16);
+  --accent-faint:rgba(139,224,74,.08);
+  --good:#8BE04A;           /* brand - governor ACTIVE is green */
+  --warn:#B99A4A;           /* brand - the MIN/MAX stat amber */
+  --crit:#F2555A;
+  --good-soft:rgba(139,224,74,.14);
+  --warn-soft:rgba(185,154,74,.17);
+  --crit-soft:rgba(242,85,90,.15);
+  --blue:#2E93CE;           /* brand - the lion's blue */
+  --sans:"Open Sans","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:"JetBrains Mono","SF Mono",Menlo,Consolas,monospace;
+  --disp:"Open Sans","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --r:8px;
+}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:20px 40px;display:flex;flex-direction:column;gap:14px}
+h1,h2,h3{margin:0;text-wrap:balance}
+p{margin:0}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.tiny{font-size:12.5px}
+.lab{font-family:var(--mono);font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
+
+/* ---------- header ---------- */
+.top{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between}
+.brand{display:flex;gap:11px;align-items:center;min-width:0}
+.rotor{flex:none;width:34px;height:34px;color:var(--accent)}
+.rotor .hub{transform-origin:50% 50%;animation:spin 1.4s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.rotor .hub{animation:none}}
+.brand h1{font-family:var(--disp);font-size:30px;font-weight:800;letter-spacing:.005em;line-height:1.05}
+.brand .sub{font-family:var(--mono);font-size:12.5px;color:var(--ink-3);letter-spacing:.02em}
+.srcline{display:flex;align-items:center;gap:10px}
+.pill{font-family:var(--mono);font-size:12px;letter-spacing:.05em;text-transform:uppercase;padding:4px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent-ink);white-space:nowrap}
+.pill.live{background:var(--good-soft);color:var(--good)}
+.meter{width:104px;height:9px;border-radius:999px;background:var(--sunk);overflow:hidden;position:relative}
+.meter i{display:block;height:100%;width:0%;background:var(--good);transition:width .12s linear}
+.meter i.hot{background:var(--crit)}
+.meter::after{content:"";position:absolute;inset-block:0;left:88%;width:1px;background:var(--line)}
+
+/* ---------- panels ---------- */
+.app{display:grid;gap:14px;align-items:start}
+.app>*{min-width:0}
+@media(min-width:920px){
+  .app{grid-template-columns:352px minmax(0,1fr)}
+  #pRead{grid-column:1;grid-row:1}
+  #pCtrl{grid-column:1;grid-row:2}
+  #pSpec{grid-column:2;grid-row:1}
+  #pTrend{grid-column:2;grid-row:2}
+  #pVerify{grid-column:2;grid-row:3}
+}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px}
+
+/* ---------- readout ---------- */
+.readout{background:var(--surface);border-color:var(--accent)}
+.rowlab{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.lock{font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:4px 9px;border-radius:5px;background:var(--good-soft);color:var(--good);white-space:nowrap}
+.lock[data-s="weak"]{background:var(--warn-soft);color:var(--warn)}
+.lock[data-s="none"]{background:var(--crit-soft);color:var(--crit)}
+.big{display:flex;align-items:baseline;gap:8px;margin-top:4px;min-width:0}
+.big .n{font-family:var(--disp);font-weight:800;font-size:clamp(52px,13.5vw,88px);line-height:.95;letter-spacing:-.025em;font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap}
+.big.stale .n{color:var(--ink-3)}
+.big.oor .n{color:var(--warn)}
+.big .unit{font-family:var(--mono);font-size:16px;color:var(--ink-3);letter-spacing:.06em}
+
+/* band gauge */
+.gauge{margin-top:14px}
+.track{position:relative;height:26px;border-radius:6px;background:var(--sunk);border:1px solid var(--line-soft);overflow:hidden}
+.track .fill{position:absolute;inset-block:0;left:0;width:0%;background:var(--accent-faint);border-right:2px solid var(--accent);transition:width .18s ease-out}
+.track .tick{position:absolute;inset-block:0;width:1px;background:var(--line)}
+.scale{display:flex;justify-content:space-between;margin-top:5px}
+.scale span{font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+.alt{margin-top:10px;font-family:var(--mono);font-size:13px;line-height:1.5;color:var(--ink-2);background:var(--surface-2);border-left:2px solid var(--warn);padding:7px 9px;border-radius:0 6px 6px 0}
+.alt b{color:var(--ink);font-weight:600}
+
+.facts{display:grid;grid-template-columns:1fr 1fr;gap:1px;margin:14px 0 0;background:var(--line-soft);border:1px solid var(--line-soft);border-radius:8px;overflow:hidden}
+.facts>div{background:var(--surface);padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.facts dd{margin:0;font-family:var(--mono);font-size:19px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink)}
+.facts dd small{font-size:13px;color:var(--ink-3);font-weight:400}
+.facts dd.amber{color:var(--warn)}
+
+/* ---------- verify ---------- */
+.verify{display:grid;gap:9px}
+.vhead{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.verdict{font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:4px 9px;border-radius:5px;background:var(--good-soft);color:var(--good)}
+.verdict[data-s="bad"]{background:var(--crit-soft);color:var(--crit)}
+.vgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.vgrid div{display:flex;flex-direction:column;gap:1px}
+.vgrid b{font-family:var(--mono);font-size:21px;font-weight:600;font-variant-numeric:tabular-nums}
+.vnote{font-size:13.5px;color:var(--ink-2);line-height:1.55}
+
+/* ---------- controls ---------- */
+.controls{display:grid;gap:12px}
+.field{display:grid;gap:5px}
+.seg{display:flex;background:var(--sunk);border:1px solid var(--line-soft);border-radius:7px;padding:3px;gap:3px}
+.seg button{flex:1;appearance:none;border:0;background:transparent;font-family:var(--mono);font-size:14px;font-variant-numeric:tabular-nums;color:var(--ink-2);padding:9px 0;border-radius:5px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--surface-2);color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+input[type=number],select{width:100%;font-family:var(--mono);font-size:15px;padding:9px 10px;border:1px solid var(--line);border-radius:7px;background:var(--surface-2);color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.btn{appearance:none;border:1px solid var(--accent);background:var(--accent);color:var(--accent-on);font-family:var(--sans);font-weight:600;font-size:16px;padding:12px 16px;border-radius:8px;cursor:pointer;width:100%}
+.btn:hover{filter:brightness(1.07)}
+.btn.ghost{background:transparent;color:var(--ink-2);border-color:var(--line)}
+.btn.ghost:hover{background:var(--surface-2);filter:none}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.err{font-size:13.5px;color:var(--crit);background:var(--crit-soft);border-radius:7px;padding:9px 11px;line-height:1.5}
+.err a,.hint a{color:inherit;font-weight:600}
+.err code{font-family:var(--mono);font-size:12.5px;word-break:break-all;display:inline-block}
+.hint{font-size:13.5px;color:var(--ink-2);line-height:1.5;background:var(--surface-2);border:1px solid var(--line);border-radius:7px;padding:9px 11px}
+.hint b{color:var(--ink)}
+.diag{margin-top:7px;padding-top:7px;border-top:1px solid var(--crit-soft);
+  font-family:var(--mono);font-size:12px;color:var(--ink-2);letter-spacing:.02em}
+
+/* ---------- charts ---------- */
+figure.chart{margin:0}
+figcaption{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:9px;flex-wrap:wrap}
+figcaption strong{font-size:15.5px;font-weight:700}
+.cwrap{position:relative;width:100%}
+.cwrap canvas{display:block;width:100%;max-width:100%;touch-action:pan-y}
+.tip{position:absolute;pointer-events:none;opacity:0;transform:translate(-50%,-115%);background:var(--ink);color:var(--bg);font-family:var(--mono);font-size:12.5px;line-height:1.45;padding:5px 8px;border-radius:6px;white-space:nowrap;transition:opacity .09s;z-index:3}
+.tip.on{opacity:1}
+
+/* ---------- notes ---------- */
+.notes{border-top:1px solid var(--line);padding-top:16px;display:grid;gap:12px}
+@media(min-width:760px){.notes{grid-template-columns:repeat(3,1fr);gap:22px}}
+.notes h3{font-family:var(--mono);font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);margin-bottom:5px}
+.notes p{font-size:14px;color:var(--ink-2);line-height:1.6}
+.notes code{font-family:var(--mono);font-size:12.5px;background:var(--surface-2);padding:1px 4px;border-radius:4px;color:var(--ink)}
+.notes .caution{border-left:2px solid var(--crit);padding-left:10px}
+.notes .caution h3{color:var(--crit)}
+
+.tagline{margin-top:18px;padding:11px 12px;border-top:1px solid var(--line-soft);
+  text-align:center;font-family:var(--mono);font-size:12px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-3)}
+.tagline span{color:var(--accent);margin:0 .35em}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div class="brand">
+    <svg class="rotor" viewBox="0 0 40 40" aria-hidden="true">
+      <g class="hub">
+        <rect x="4" y="18.4" width="32" height="3.2" rx="1.6" fill="currentColor"/>
+        <circle cx="20" cy="20" r="3.4" fill="currentColor"/>
+      </g>
+      <circle cx="20" cy="20" r="15" fill="none" stroke="currentColor" stroke-opacity=".25" stroke-width="1.2"/>
+    </svg>
+    <div>
+      <h1>Zelion Tach</h1>
+      <p class="sub">Acoustic head-speed meter &middot; 1 000&ndash;6 000 rpm</p>
+    </div>
+  </div>
+  <div class="srcline">
+    <span class="pill" id="modePill">Demo signal</span>
+    <div class="meter" title="Input level"><i id="meterFill"></i></div>
+    <span class="mono tiny" id="meterVal" style="color:var(--ink-3);min-width:56px">&minus;&infin; dBFS</span>
+  </div>
+</header>
+
+<main class="app">
+
+    <!-- READOUT -->
+    <section class="panel readout" id="pRead">
+      <div class="rowlab">
+        <span class="lab">Head speed</span>
+        <span class="lock" id="lockChip" data-s="good">Strong lock</span>
+      </div>
+      <div class="big" id="bigWrap"><span class="n" id="rpmVal">2135</span><span class="unit">rpm</span></div>
+
+      <div class="gauge">
+        <div class="track" id="track"><div class="fill" id="trackFill"></div></div>
+        <div class="scale" id="scale"><span>1 000</span><span>6 000</span></div>
+      </div>
+      <p class="alt" id="altLine" hidden></p>
+
+      <dl class="facts">
+        <div><dt class="lab">Blade pass</dt><dd id="fHz">71.2 <small>Hz</small></dd></div>
+        <div><dt class="lab">Blades</dt><dd id="fBlades">2</dd></div>
+        <div><dt class="lab">Peak hold</dt><dd id="fPeak" class="amber">2 147</dd></div>
+        <div><dt class="lab">Signal</dt><dd id="fRes">—</dd></div>
+      </dl>
+    </section>
+
+    <!-- VERIFY / SIGNAL -->
+    <section class="panel verify" id="pVerify">
+      <div class="vhead">
+        <span class="lab" id="vTitle">Self-test &middot; known signal</span>
+        <span class="verdict" id="vChip">Pass</span>
+      </div>
+      <div class="vgrid" id="vGrid">
+        <div><span class="lab">Injected</span><b id="vIn">2 137</b></div>
+        <div><span class="lab">Measured</span><b id="vOut">2 135</b></div>
+        <div><span class="lab">Error</span><b id="vErr">&minus;2</b></div>
+      </div>
+      <div class="field" id="vSliderField">
+        <label class="lab" for="testRpm">Test tone &middot; <span class="mono" id="testRpmLab">2 137 rpm</span></label>
+        <input type="range" id="testRpm" min="1000" max="6000" step="1" value="2137">
+      </div>
+      <p class="vnote" id="vNote">A synthetic 2-blade rotor signature is fed straight into the detector &mdash; harmonics, a pink noise floor, and the low-frequency rolloff a phone mic actually has. If measured tracks injected, the maths is sound. Then switch to the microphone.</p>
+    </section>
+
+    <!-- CONTROLS -->
+    <section class="panel controls" id="pCtrl">
+      <div class="field">
+        <span class="lab">Source</span>
+        <div class="seg" role="group" aria-label="Signal source">
+          <button id="mDemo" aria-pressed="true">Self-test</button>
+          <button id="mMic" aria-pressed="false">Mic</button>
+          <button id="mFile" aria-pressed="false">Recording</button>
+        </div>
+        <input type="file" id="fileInput" accept="audio/*,video/*" hidden>
+      </div>
+      <div class="field">
+        <span class="lab">Blade count</span>
+        <div class="seg" role="group" aria-label="Blade count">
+          <button class="bl" data-b="2" aria-pressed="true">2</button>
+          <button class="bl" data-b="3" aria-pressed="false">3</button>
+          <button class="bl" data-b="4" aria-pressed="false">4</button>
+          <button class="bl" data-b="5" aria-pressed="false">5</button>
+        </div>
+      </div>
+      <div class="two">
+        <div class="field"><label class="lab" for="rMin">Expect min</label><input type="number" id="rMin" value="1000" min="200" max="20000" step="50"></div>
+        <div class="field"><label class="lab" for="rMax">Expect max</label><input type="number" id="rMax" value="6000" min="300" max="30000" step="50"></div>
+      </div>
+      <button class="btn" id="startBtn">Start microphone</button>
+      <button class="btn ghost" id="resetBtn">Reset peak hold &amp; trend</button>
+      <p class="hint" id="frameHint" hidden></p>
+      <div class="err" id="errBox" hidden></div>
+    </section>
+
+    <!-- SPECTRUM -->
+    <figure class="panel chart" id="pSpec">
+      <figcaption>
+        <strong>Acoustic spectrum</strong>
+        <span class="mono tiny" style="color:var(--ink-3)">Shaded = search band &middot; drag across to probe</span>
+      </figcaption>
+      <div class="cwrap"><canvas id="specCv"></canvas><div class="tip" id="specTip"></div></div>
+    </figure>
+
+    <!-- TREND -->
+    <figure class="panel chart" id="pTrend">
+      <figcaption>
+        <strong>Head speed, last 60 seconds</strong>
+        <span class="mono tiny" style="color:var(--ink-3)" id="trendMeta">&nbsp;</span>
+      </figcaption>
+      <div class="cwrap"><canvas id="trendCv"></canvas><div class="tip" id="trendTip"></div></div>
+    </figure>
+</main>
+
+<footer class="notes">
+  <div>
+    <h3>Harmonics and spool-up</h3>
+    <p>A rotor radiates a tone at <code>rpm &times; blades &div; 60</code> &mdash; 33&ndash;200 Hz for two blades at 1 000&ndash;6 000 rpm. The noise floor is estimated and subtracted before anything else, so wind and traffic cannot tilt the scoring. Candidates are then scored <em>across</em> frames: a rotor tone persists and drifts slowly, while a shout, a gust or a passing model does not, so a transient never lasts long enough to be believed. The expected range is a preference, not a filter &mdash; a head below your minimum is still reported, and marked.</p>
+  </div>
+  <div>
+    <h3>Reading the signal number</h3>
+    <p>Stand 2&ndash;5 m off, downwind, with the mic unobstructed. <b>Signal</b> is the tone’s margin over the surrounding noise: above 18 dB is comfortable, below that it turns amber and the lock will wander &mdash; move closer, get out of the wind, or shield the mic with your hand. The ticks along the spectrum baseline mark where harmonics of the current lock should fall.</p>
+  </div>
+  <div class="caution">
+    <h3>Not an airworthiness instrument</h3>
+    <p>This is a tuning aid for RC models. It is uncertified, it can be fooled by a strong harmonic, and it must not be used to decide whether any rotor system is safe to fly. Verify against an optical tach before you trust it for anything that matters.</p>
+  </div>
+</footer>
+
+<p class="tagline">No hype <span>/</span> just voltage <span>/</span> real power</p>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============================ constants ============================ */
+var FFT = 32768, HARM = 5, CLAMP_DB = -145;
+var RPM_FLOOR = 300;    /* lowest head speed the detector will look for */
+var MAX_SLEW  = 4500;   /* rpm per second - a rotor cannot change faster */
+var reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+var SHARE_URL = location.href;
+var framed = (function(){ try{ return window.self !== window.top; }catch(e){ return true; } })();
+/* Permissions-Policy check: a framed page only gets a mic if the host frame granted it. */
+function micAllowedByPolicy(){
+  try{ if(document.featurePolicy && document.featurePolicy.allowsFeature) return document.featurePolicy.allowsFeature("microphone"); }catch(e){}
+  return null;   /* unknown - never block on a guess */
+}
+
+/* ============================ state ============================ */
+var S = {
+  mode:"demo", blades:2, rpmMin:1000, rpmMax:6000,
+  sampleRate:48000, binHz:48000/FFT,
+  spec:null, rpm:null, freq:null, conf:0, locked:false,
+  raw:[], hist:[], peak:0, pending:[], lastT:0, inRange:true, corrected:false, other:null, snr:null, held:0,
+  level:-Infinity, clipped:false,
+  demoRpm:2137, demoActual:null, demoPhase:0
+};
+var audio = { ctx:null, stream:null, analyser:null, src:null, dbBuf:null, timeBuf:null, raf:0, wake:null };
+
+/* ============================ dom ============================ */
+var $ = function(id){ return document.getElementById(id); };
+var elRpm=$("rpmVal"), elBig=$("bigWrap"), elLock=$("lockChip"), elFhz=$("fHz"), elBlades=$("fBlades"),
+    elPeak=$("fPeak"), elRes=$("fRes"), elFill=$("trackFill"), elScale=$("scale"), elTrack=$("track"),
+    elPill=$("modePill"), elMeter=$("meterFill"), elMeterVal=$("meterVal"),
+    elVTitle=$("vTitle"), elVChip=$("vChip"), elVGrid=$("vGrid"), elVIn=$("vIn"), elVOut=$("vOut"),
+    elVErr=$("vErr"), elVNote=$("vNote"), elVSlider=$("vSliderField"), elTestRpm=$("testRpm"),
+    elTestLab=$("testRpmLab"), elStart=$("startBtn"), elErr=$("errBox"), elTrendMeta=$("trendMeta");
+
+var fmt = function(n){ return Math.round(n).toLocaleString("en-US").replace(/,/g,"\u202F"); };
+
+/* ============================ detector ============================ */
+/* Harmonic product spectrum over log magnitudes, then parabolic refinement
+   on the raw spectrum. Returns null when nothing in band stands out. */
+/* Noise floor near a bin, ignoring the peak itself. */
+/* ---------------------------------------------------------------- whitening
+   Wind, road noise and a handset's own low-frequency rolloff all tilt the
+   noise floor, and a tilted floor biases anything that sums dB across
+   harmonics. Estimating the floor and subtracting it leaves "dB above local
+   noise", where a peak is worth the same wherever it sits. Everything
+   downstream then works on one flat scale.
+   The floor is a low percentile over a wide window, sampled every 16 bins and
+   interpolated - a true per-bin median costs far more and buys nothing. */
+function noiseFloor(dB, n, out){
+  var BLK = 16, HALF = 48, i, j, k, a, prevI = 0, prevV = 0, v;
+  var first = true;
+  for(i = 0; i < n; i += BLK){
+    a = [];
+    for(j = Math.max(0, i - HALF); j < Math.min(n, i + HALF); j += 2){
+      v = dB[j];
+      a.push((isFinite(v) && v > CLAMP_DB) ? v : CLAMP_DB);
+    }
+    a.sort(function(x, y){ return x - y; });
+    v = a[Math.floor(a.length * 0.35)];          /* below the median: the floor, not the peaks */
+    if(first){ prevI = i; prevV = v; first = false; out[i] = v; continue; }
+    for(k = prevI; k <= i && k < n; k++)
+      out[k] = prevV + (v - prevV)*((k - prevI)/(i - prevI));
+    prevI = i; prevV = v;
+  }
+  for(k = prevI; k < n; k++) out[k] = prevV;
+}
+
+var floorBuf = null, whiteBuf = null;
+function whiten(dB, n){
+  if(!floorBuf || floorBuf.length < n){ floorBuf = new Float32Array(n); whiteBuf = new Float32Array(n); }
+  noiseFloor(dB, n, floorBuf);
+  var i, v;
+  for(i = 0; i < n; i++){
+    v = dB[i];
+    if(!isFinite(v) || v < CLAMP_DB) v = CLAMP_DB;
+    v -= floorBuf[i];
+    whiteBuf[i] = v < -6 ? -6 : v;               /* a hole is not worth more than a little */
+  }
+  return whiteBuf;
+}
+
+/* Height above the noise floor is not enough. A strong tone spreads leakage
+   skirts either side of itself, and those skirts sit well above the floor, so
+   a height test finds "peaks" at frequencies where nothing is playing - which
+   is how a comb at half or a quarter of the real fundamental passes. This is a
+   prominence test instead: the candidate must rise above its own shoulders, so
+   a point part-way down someone else's skirt fails however high it sits. */
+function partialPresent(w, binHz, f, margin){
+  var n = w.length, k = Math.round(f/binHz), i, pk;
+  if(k < 3 || k > n - 4) return false;
+  pk = k;
+  for(i = k - 1; i <= k + 1; i++) if(w[i] > w[pk]) pk = i;
+  if(w[pk] < margin) return false;
+
+  var near = 4, far = 12, lo = Infinity, hi = Infinity, seen = 0;
+  for(i = Math.max(0, pk - far); i <= pk - near; i++){ if(w[i] < lo) lo = w[i]; seen++; }
+  for(i = pk + near; i <= Math.min(n - 1, pk + far); i++){ if(w[i] < hi) hi = w[i]; seen++; }
+  if(seen < 4) return true;                     /* too near an edge to judge */
+  var shoulder = Math.max(isFinite(lo) ? lo : 0, isFinite(hi) ? hi : 0);
+  return (w[pk] - shoulder) >= margin;
+}
+
+/* A handset mic rolls off hard at the bottom, so the true fundamental can be
+   far weaker than its own harmonics and HPS locks onto one of them. Walk back
+   down: f/d is the real fundamental only when the partials it adds - the ones
+   f cannot account for - are present. For d=2 those are the odd multiples
+   1, 3, 5 of f/2, and two thirds must be there, so one attenuated member
+   cannot sink the test. */
+var NEW_PARTIALS = { 2:[1,3,5], 3:[1,2,4,5] };
+function descend(w, binHz, f, fFloor){
+  for(var iter = 0; iter < 5; iter++){
+    var moved = false;
+    for(var d = 2; d <= 3; d++){
+      var fs = f/d;
+      if(fs < fFloor) continue;
+      var ms = NEW_PARTIALS[d], hit = 0, i;
+      for(i = 0; i < ms.length; i++) if(partialPresent(w, binHz, fs*ms[i], 7)) hit++;
+      if(hit*3 >= ms.length*2){ f = fs; moved = true; break; }
+    }
+    if(!moved) break;
+  }
+  return f;
+}
+
+function peakAt(w, binHz, f){
+  var n = w.length, k = Math.round(f/binHz), i, pk;
+  if(k < 3 || k > n - 4) return null;
+  pk = k;
+  for(i = k - 1; i <= k + 1; i++) if(w[i] > w[pk]) pk = i;
+  return w[pk];
+}
+function medOf(a){ a.sort(function(x, y){ return x - y; }); return a[a.length >> 1]; }
+
+/* A comb at half the true fundamental contains every real harmonic AND the
+   silent gaps between them, so counting partials cannot tell it apart - both
+   score six out of six. What gives it away is strength: the partials such a
+   candidate ADDS are far weaker than the ones it shares with the real comb.
+   Measured on a real recording, a fake at half read 9 dB on its added partials
+   against 44 dB on its shared ones. Fold it up to the real fundamental. */
+function octaveGuard(w, binHz, f, fMaxHz){
+  for(var pass = 0; pass < 3; pass++){
+    var moved = false;
+    for(var d = 2; d <= 3; d++){
+      if(f*d > fMaxHz) continue;
+      var added = [], shared = [], m, v;
+      for(m = 1; m <= d*3; m++){
+        v = peakAt(w, binHz, f*m);
+        if(v == null) break;
+        (m % d === 0 ? shared : added).push(v);
+      }
+      if(added.length < 2 || shared.length < 2) continue;
+      if(medOf(shared) - medOf(added) >= 14){ f *= d; moved = true; break; }
+    }
+    if(!moved) break;
+  }
+  return f;
+}
+
+/* How strong the WEAKEST part of a comb is, which is what separates a real one
+   from a chance alignment. A low quantile, so a single strong partial cannot
+   carry a candidate that is otherwise empty. */
+function combStrength(w, binHz, f, M){
+  var vals = [], m, v;
+  for(m = 1; m <= M; m++){
+    v = peakAt(w, binHz, f*m);
+    if(v == null) break;
+    vals.push(v);
+  }
+  if(vals.length < 4) return 0;
+  vals.sort(function(a, b){ return a - b; });
+  return vals[Math.floor(vals.length*0.34)];
+}
+
+function combQuality(w, binHz, f, M){
+  var hit = 0, m;
+  for(m = 1; m <= M; m++) if(partialPresent(w, binHz, f*m, 6)) hit++;
+  return hit;
+}
+
+/* Measuring the m-th harmonic and dividing by m divides the frequency error by
+   m too, and a higher harmonic is often the cleaner peak. */
+function refine(w, binHz, f, M){
+  var n = w.length, bestM = 1, bestScore = -Infinity, m, k, pk, i, half, ex;
+  for(m = 1; m <= M; m++){
+    k = Math.round(f*m/binHz);
+    half = Math.ceil(m/2) + 1;
+    if(k - half < 2 || k + half > n - 3) break;
+    pk = k;
+    for(i = k - half; i <= k + half; i++) if(w[i] > w[pk]) pk = i;
+    ex = w[pk];
+    if(ex < 8) continue;
+    if(ex + 5*m > bestScore){ bestScore = ex + 5*m; bestM = m; }
+  }
+  k = Math.round(f*bestM/binHz);
+  half = Math.ceil(bestM/2) + 1;
+  if(k - half < 2 || k + half > n - 3) return f;
+  pk = k;
+  for(i = k - half; i <= k + half; i++) if(w[i] > w[pk]) pk = i;
+  var a = w[pk-1], b = w[pk], c = w[pk+1], d = 0, den = a - 2*b + c;
+  if(isFinite(den) && den < -1e-9){ d = 0.5*(a-c)/den; if(!(d > -0.5 && d < 0.5)) d = 0; }
+  return (pk + d)*binHz/bestM;
+}
+
+/* One frame's worth of explanations. Choosing between them is the tracker's
+   job, because a single frame cannot tell a rotor from a passing motorbike. */
+function analyse(dB, binHz, blades, rpmMax){
+  var n = dB.length;
+  var w = whiten(dB, n);
+  var fFloor = Math.max(8, RPM_FLOOR*blades/60);
+  var fMax = rpmMax*blades/60;
+  var kMin = Math.max(3, Math.floor(fFloor/binHz));
+  var kMax = Math.min(Math.floor((n-1)/HARM), Math.ceil(fMax/binHz));
+  if(kMax <= kMin) return { cands:[], w:w, best:0 };
+
+  var hps = new Float64Array(kMax + 2), best = -Infinity, k, r, sum;
+  for(k = kMin; k <= kMax; k++){
+    sum = 0;
+    for(r = 1; r <= HARM; r++) sum += w[k*r];
+    hps[k] = sum;
+    if(sum > best) best = sum;
+  }
+
+  var ridges = [], i, j;
+  for(k = kMin + 1; k < kMax; k++) if(hps[k] >= hps[k-1] && hps[k] > hps[k+1]) ridges.push(k);
+  ridges.sort(function(a, b){ return hps[b] - hps[a]; });
+  ridges = ridges.slice(0, 12);
+
+  var cands = [];
+  for(i = 0; i < ridges.length; i++){
+    var kr = ridges[i], pk = kr;
+    for(k = Math.max(1, kr-2); k <= Math.min(n-2, kr+2); k++) if(w[k] > w[pk]) pk = k;
+    var f = descend(w, binHz, pk*binHz, fFloor);
+    f = octaveGuard(w, binHz, f, fMax*1.05);
+    if(f < fFloor) continue;
+    var dup = false;
+    for(j = 0; j < cands.length; j++) if(Math.abs(cands[j].f - f) < 0.02*f){ dup = true; break; }
+    if(dup) continue;
+    if(combQuality(w, binHz, f, 6) < 4) continue;        /* not a comb at all */
+    var strength = combStrength(w, binHz, f, 6);
+    if(strength < 9) continue;                           /* a comb of nothing */
+    f = refine(w, binHz, f, 5);
+    cands.push({ f:f, comb:strength, snr:strength, score:hps[kr] });
+  }
+  return { cands:cands, w:w, best:best };
+}
+
+/* ------------------------------------------------------------------ tracking
+   A rotor tone persists and drifts slowly. A shout, a car, a gust or a dropped
+   spanner does not. Scoring candidates across frames rather than within one is
+   what separates them: a transient never accumulates enough history to be
+   believed, however loud it was for a moment. */
+var MATCH_TOL = 0.035, TRACK_TTL = 1600, MIN_HITS = 4, MAX_TRACKS = 8;
+var tracks = [];
+function resetTracks(){ tracks.length = 0; }
+
+function updateTracks(cands, now){
+  var i, j, c, t, best, bd;
+  for(i = 0; i < cands.length; i++){
+    c = cands[i]; best = null; bd = Infinity;
+    for(j = 0; j < tracks.length; j++){
+      t = tracks[j];
+      var d = Math.abs(t.f - c.f)/c.f;
+      if(d < MATCH_TOL && d < bd){ best = t; bd = d; }
+    }
+    if(best){
+      best.f = c.f;                               /* no lag: the median downstream does the steadying */
+      best.hits = Math.min(40, best.hits + 1);
+      best.comb = best.comb*0.6 + c.comb*0.4;
+      best.snr = best.snr*0.6 + c.snr*0.4;
+      best.last = now;
+    } else {
+      tracks.push({ f:c.f, hits:1, comb:c.comb, snr:c.snr, last:now });
+    }
+  }
+  for(i = tracks.length - 1; i >= 0; i--){
+    if(now - tracks[i].last > TRACK_TTL) tracks.splice(i, 1);
+    else if(now - tracks[i].last > 250) tracks[i].hits = Math.max(0, tracks[i].hits - 0.5);
+  }
+  if(tracks.length > MAX_TRACKS){
+    tracks.sort(function(a, b){ return b.hits - a.hits; });
+    tracks.length = MAX_TRACKS;
+  }
+}
+
+/* The head is the lowest well-formed comb, but only among the ones that have
+   earned belief. The expected range is a preference, never a filter - a head
+   below it still gets reported, just with less weight. */
+function chooseTrack(blades, rpmMin, rpmMax){
+  var elig = [], i, t, rpm;
+  for(i = 0; i < tracks.length; i++){
+    t = tracks[i];
+    if(t.hits < MIN_HITS || t.comb < 9) continue;
+    rpm = 60*t.f/blades;
+    t.rank = ((rpm >= rpmMin && rpm <= rpmMax) ? 1 : 0.4)
+           * Math.min(1, t.comb/26) * Math.min(1, t.hits/12);
+    elig.push(t);
+  }
+  if(!elig.length) return null;
+  var top = 0;
+  for(i = 0; i < elig.length; i++) if(elig[i].rank > top) top = elig[i].rank;
+  var good = elig.filter(function(x){ return x.rank >= top*0.75; });
+  good.sort(function(a, b){ return a.f - b.f; });
+  return good[0];
+}
+
+function median(arr){
+  var s = arr.slice().sort(function(a,b){ return a-b; });
+  return s[s.length>>1];
+}
+
+/* ============================ synthetic rotor signature ============================ */
+/* Real algorithm, known input: the self-test path builds the spectrum a phone mic
+   would see for a given rpm, including the sub-100 Hz rolloff. */
+var noiseSeed = 12345;
+function rnd(){ noiseSeed = (noiseSeed*1103515245 + 12345) & 0x7fffffff; return noiseSeed/0x7fffffff; }
+
+function synth(rpm, blades, binHz, bins){
+  var dB = new Float32Array(bins), i, f, h;
+  for(i = 0; i < bins; i++){
+    f = i*binHz;
+    dB[i] = -94 - 9*Math.log10(1 + f/40) + (rnd()-0.5)*7;
+  }
+  var f0 = rpm*blades/60;
+  for(h = 1; h <= 14; h++){
+    f = f0*h;
+    if(f/binHz > bins-3) break;
+    var roll = f < 110 ? -20*Math.log10(110/f) : 0;      /* handset mic low-end rolloff */
+    var amp  = -24 - 13*Math.log2(h) + roll;
+    var kc = f/binHz;
+    for(var k = Math.max(1, Math.floor(kc)-3); k <= Math.floor(kc)+3; k++){
+      var g = amp - 11*(k-kc)*(k-kc);                     /* window leakage skirt */
+      dB[k] = 10*Math.log10(Math.pow(10, dB[k]/10) + Math.pow(10, g/10));
+    }
+  }
+  return dB;
+}
+
+/* ============================ ingest one frame ============================ */
+function frame(dB){
+  S.spec = dB;
+  var now = performance.now();
+  var a = analyse(dB, S.binHz, S.blades, S.rpmMax);
+  updateTracks(a.cands, now);
+  var t = chooseTrack(S.blades, S.rpmMin, S.rpmMax);
+
+  if(t){
+    var cand = 60*t.f/S.blades, accept = true;
+
+    /* A head cannot slew thousands of rpm between frames. A candidate that
+       claims it has to repeat before it is believed. */
+    if(S.rpm != null){
+      var dt = Math.max(0.05, (now - S.lastT)/1000);
+      if(Math.abs(cand - S.rpm) > Math.max(200, MAX_SLEW*dt)){
+        S.pending.push(cand);
+        if(S.pending.length >= 3){
+          var lo = Math.min.apply(null, S.pending), hi = Math.max.apply(null, S.pending);
+          if(hi - lo <= 0.12*hi){ cand = median(S.pending); S.pending = []; S.raw = []; }
+          else { S.pending.shift(); accept = false; }
+        } else accept = false;
+      } else S.pending = [];
+    }
+
+    if(accept){
+      S.raw.push(cand); if(S.raw.length > 5) S.raw.shift();
+      S.rpm = median(S.raw);
+      S.freq = S.rpm*S.blades/60;
+      S.lastT = now;
+      S.inRange = S.rpm >= S.rpmMin && S.rpm <= S.rpmMax;
+      if(S.inRange && S.rpm > S.peak) S.peak = S.rpm;
+      S.hist.push({ t:now, rpm:S.rpm, ok:S.inRange });
+    }
+
+    /* Confidence is now evidence over time, not one frame's peak height. */
+    S.snr = t.snr;
+    S.held = t.hits;
+    S.conf = Math.max(0, Math.min(1, Math.min(1, t.snr/26)*0.5 + Math.min(1, t.hits/12)*0.5));
+    S.locked = true;
+
+    var other = null, i, o;
+    for(i = 0; i < tracks.length; i++){
+      o = tracks[i];
+      if(o === t || o.f <= t.f*1.5 || o.comb < 14 || o.hits < MIN_HITS) continue;
+      if(!other || o.hits > other.hits) other = o;
+    }
+    S.other = other ? 60*other.f/S.blades : null;
+  } else {
+    S.conf = 0; S.locked = false; S.other = null; S.snr = null; S.held = 0;
+    S.raw.length = 0; S.pending.length = 0;
+  }
+
+  while(S.hist.length && now - S.hist[0].t > 60000) S.hist.shift();
+  paint();
+}
+
+/* ============================ render: readout ============================ */
+function paint(){
+  elRpm.textContent = S.rpm == null ? "—" : fmt(S.rpm);
+  elBig.className = "big" + (S.locked ? "" : " stale") + (S.rpm != null && !S.inRange ? " oor" : "");
+
+  var st;
+  if(S.rpm != null && !S.inRange)        st = ["weak", S.rpm < S.rpmMin ? "Below set range" : "Above set range"];
+  else if(S.conf >= 0.62)                st = ["good", "Locked \u00b7 held " + (S.held*0.07).toFixed(1) + " s"];
+  else if(S.conf >= 0.34)                st = ["weak", "Weak lock"];
+  else                                   st = ["none", S.rpm == null ? "Listening" : "Holding"];
+  elLock.dataset.s = st[0]; elLock.textContent = st[1];
+
+  elFhz.innerHTML = (S.freq == null ? "—" : S.freq.toFixed(1)) + " <small>Hz</small>";
+  elBlades.textContent = S.blades;
+  elPeak.textContent = S.peak ? fmt(S.peak) : "—";
+  if(S.snr == null){ elRes.innerHTML = "\u2014"; elRes.className = ""; }
+  else {
+    elRes.innerHTML = Math.round(S.snr) + " <small>dB over noise</small>";
+    elRes.className = S.snr >= 18 ? "" : "amber";
+  }
+
+  var alt = $("altLine");
+  if(S.other && S.rpm){
+    var ratio = S.other/S.rpm, what;
+    if(ratio > 3.2 && ratio < 6.5)       what = "a tail rotor (" + ratio.toFixed(1) + "\u00d7 the head)";
+    else if(Math.abs(ratio - 2) < 0.12)  what = "the 2nd harmonic";
+    else if(Math.abs(ratio - 3) < 0.15)  what = "the 3rd harmonic";
+    else                                 what = "another source";
+    alt.innerHTML = "Competing tone at <b>" + fmt(S.other) + " rpm</b> \u2014 " + what + ". The head is the lowest well-formed comb, so that one is ignored.";
+    alt.hidden = false;
+  } else alt.hidden = true;
+
+  var pct = S.rpm == null ? 0 : (S.rpm - S.rpmMin)/(S.rpmMax - S.rpmMin);
+  elFill.style.width = (Math.max(0, Math.min(1, pct))*100).toFixed(2) + "%";
+
+  if(S.mode === "demo"){
+    var inj = S.demoActual != null ? S.demoActual : S.demoRpm;
+    var err = S.rpm == null ? null : S.rpm - inj;
+    elVIn.textContent = fmt(inj);
+    elVOut.textContent = S.rpm == null ? "—" : fmt(S.rpm);
+    elVErr.textContent = err == null ? "—" : (err >= 0 ? "+" : "−") + fmt(Math.abs(err));
+    var ok = err != null && Math.abs(err) <= Math.max(15, inj*0.01);
+    elVChip.dataset.s = ok ? "" : "bad";
+    elVChip.textContent = ok ? "Pass" : "Off";
+  } else if(S.mode === "file"){
+    var pos = audio.ctx ? Math.max(0, Math.min(audio.fileDur || 0, audio.ctx.currentTime - (audio.fileT0 || 0))) : 0;
+    elVIn.textContent = pos.toFixed(1) + " s";
+    elVOut.textContent = (audio.fileDur || 0).toFixed(1) + " s";
+    elVErr.textContent = (S.sampleRate/1000).toFixed(1) + "k";
+    elVChip.dataset.s = "";
+    elVChip.textContent = audio.fileEnded ? "Finished" : "Playing";
+  } else {
+    elVIn.textContent = isFinite(S.level) ? S.level.toFixed(1) : "−∞";
+    elVOut.textContent = S.clipped ? "Clipping" : "Clean";
+    elVErr.textContent = (S.sampleRate/1000).toFixed(1) + "k";
+    elVChip.dataset.s = S.clipped ? "bad" : "";
+    elVChip.textContent = S.clipped ? "Reduce level" : "Headroom ok";
+  }
+
+  drawSpectrum(); drawTrend();
+}
+
+/* ============================ canvas helpers ============================ */
+function wide(){ return window.innerWidth >= 920; }
+function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function fit(cv, h){
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  var w = cv.parentNode.clientWidth || 300;
+  cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
+  cv.style.height = h + "px";
+  var g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  return { g:g, w:w, h:h };
+}
+
+/* ============================ render: spectrum ============================ */
+var specHover = null;
+function drawSpectrum(){
+  var cv = $("specCv"); if(!cv.parentNode.clientWidth) return;
+  var P = fit(cv, wide() ? 248 : 210), g = P.g, W = P.w, H = P.h;
+  var ml = 6, mr = 6, mt = 10, mb = 26;
+  var pw = W - ml - mr, ph = H - mt - mb;
+  var ink3 = css("--ink-3"), line = css("--line-soft"), accent = css("--accent"), surface = css("--surface");
+
+  var fMin = S.rpmMin*S.blades/60, fMax = S.rpmMax*S.blades/60;
+  var xMax = Math.max(120, fMax*1.45);
+  var X = function(f){ return ml + (f/xMax)*pw; };
+
+  if(!S.spec){ return; }
+  var bins = Math.min(S.spec.length - 1, Math.ceil(xMax/S.binHz));
+  var lo = 1e9, hi = -1e9, i, v;
+  for(i = 1; i <= bins; i++){ v = S.spec[i]; if(!isFinite(v)) continue; if(v < lo) lo = v; if(v > hi) hi = v; }
+  if(!isFinite(lo) || hi <= lo){ lo = -110; hi = -20; }
+  lo = Math.max(lo, hi - 75); hi = hi + 4;
+  var Y = function(d){ return mt + ph - ((Math.max(lo, Math.min(hi, d)) - lo)/(hi - lo))*ph; };
+
+  /* search band */
+  g.fillStyle = css("--accent-faint");
+  g.fillRect(X(fMin), mt, X(fMax) - X(fMin), ph);
+
+  /* grid + hz axis */
+  var step = xMax > 360 ? 100 : xMax > 180 ? 50 : 25;
+  g.strokeStyle = line; g.lineWidth = 1;
+  g.fillStyle = ink3; g.font = '12px ' + (css("--mono") || "monospace"); g.textAlign = "center";
+  g.textAlign = "right"; g.fillText("Hz", W - mr, H - 8); g.textAlign = "center";
+  for(var f = 0; f <= xMax; f += step){
+    var x = Math.round(X(f)) + 0.5;
+    g.beginPath(); g.moveTo(x, mt); g.lineTo(x, mt + ph); g.stroke();
+    g.fillText(String(f), x, H - 8);
+  }
+
+  /* spectrum fill + line */
+  g.beginPath(); g.moveTo(X(S.binHz), mt + ph);
+  for(i = 1; i <= bins; i++) g.lineTo(X(i*S.binHz), Y(S.spec[i]));
+  g.lineTo(X(bins*S.binHz), mt + ph); g.closePath();
+  g.fillStyle = css("--accent-soft"); g.fill();
+
+  g.beginPath();
+  for(i = 1; i <= bins; i++){ var xx = X(i*S.binHz), yy = Y(S.spec[i]); i === 1 ? g.moveTo(xx, yy) : g.lineTo(xx, yy); }
+  g.strokeStyle = accent; g.lineWidth = 1.4; g.lineJoin = "round"; g.stroke();
+
+  /* detected peak marker + direct label */
+  if(S.freq != null && S.freq <= xMax){
+    var px = X(S.freq);
+    /* harmonic comb: if the lock is right, these land on real peaks */
+    g.strokeStyle = accent; g.globalAlpha = .38; g.lineWidth = 1;
+    for(var hm = 2; hm <= 8; hm++){
+      var hx = X(S.freq*hm);
+      if(hx > W - mr) break;
+      g.beginPath(); g.moveTo(hx, mt + ph - 12); g.lineTo(hx, mt + ph); g.stroke();
+    }
+    g.globalAlpha = 1;
+    g.setLineDash([3,3]); g.strokeStyle = accent; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(px, mt); g.lineTo(px, mt + ph); g.stroke(); g.setLineDash([]);
+    var lbl = S.freq.toFixed(1) + " Hz · " + fmt(S.rpm) + " rpm";
+    g.font = '600 12.5px ' + (css("--mono") || "monospace");
+    var tw = g.measureText(lbl).width, bw = tw + 12;
+    var bx = px + 9;                                   /* sit beside the marker, never on it */
+    if(bx + bw > W - mr) bx = px - 9 - bw;
+    bx = Math.max(ml, bx);
+    g.fillStyle = accent; g.beginPath();
+    (g.roundRect ? g.roundRect(bx, mt, bw, 21, 4) : g.rect(bx, mt, bw, 21)); g.fill();
+    g.fillStyle = surface; g.textAlign = "left"; g.fillText(lbl, bx + 6, mt + 15);
+    g.beginPath(); g.arc(px, Y(S.spec[detectBin()]), 3.5, 0, 6.2832);
+    g.fillStyle = accent; g.fill(); g.strokeStyle = surface; g.lineWidth = 2; g.stroke();
+  }
+
+  /* hover probe */
+  var tip = $("specTip");
+  if(specHover != null && specHover >= ml && specHover <= W - mr){
+    var hf = (specHover - ml)/pw*xMax, hk = Math.max(1, Math.round(hf/S.binHz));
+    g.strokeStyle = ink3; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(specHover, mt); g.lineTo(specHover, mt + ph); g.stroke();
+    tip.className = "tip on";
+    tip.style.left = specHover + "px"; tip.style.top = mt + 4 + "px";
+    tip.textContent = hf.toFixed(1) + " Hz → " + fmt(60*hf/S.blades) + " rpm";
+  } else { tip.className = "tip"; }
+}
+function detectBin(){ return Math.max(1, Math.min((S.spec?S.spec.length-1:1), Math.round((S.freq||0)/S.binHz))); }
+
+/* ============================ render: trend ============================ */
+var trendHover = null;
+function drawTrend(){
+  var cv = $("trendCv"); if(!cv.parentNode.clientWidth) return;
+  var P = fit(cv, wide() ? 280 : 184), g = P.g, W = P.w, H = P.h;
+  var ml = 56, mr = 10, mt = 12, mb = 24;
+  var pw = W - ml - mr, ph = H - mt - mb;
+  var ink3 = css("--ink-3"), line = css("--line-soft"), accent = css("--accent"), surface = css("--surface");
+  g.font = '12px ' + (css("--mono") || "monospace");
+
+  var h = S.hist;
+  if(h.length < 2){
+    g.fillStyle = ink3; g.textAlign = "center";
+    g.fillText("Waiting for a lock…", W/2, H/2);
+    elTrendMeta.textContent = " "; $("trendTip").className = "tip"; return;
+  }
+
+  var now = performance.now(), t0 = now - 60000;
+  var lo = 1e9, hi = -1e9;
+  for(var i = 0; i < h.length; i++){ if(h[i].rpm < lo) lo = h[i].rpm; if(h[i].rpm > hi) hi = h[i].rpm; }
+  var span = Math.max(hi - lo, 180), pad = span*0.18;
+  var yLo = lo - pad, yHi = hi + pad;
+  var X = function(t){ return ml + Math.max(0, Math.min(1, (t - t0)/60000))*pw; };
+  var Y = function(r){ return mt + ph - ((r - yLo)/(yHi - yLo))*ph; };
+
+  /* grid: labelled at values the data actually reaches */
+  var rows = [hi, (hi + lo)/2, lo];
+  g.strokeStyle = line; g.lineWidth = 1; g.fillStyle = ink3; g.textAlign = "right";
+  for(var r = 0; r < rows.length; r++){
+    var y = Math.round(Y(rows[r])) + 0.5;
+    g.beginPath(); g.moveTo(ml, y); g.lineTo(ml + pw, y); g.stroke();
+    g.fillText(fmt(rows[r]), ml - 8, y + 4);
+  }
+  g.textAlign = "center";
+  g.fillText("−60 s", ml + 18, H - 7);
+  g.fillText("now", ml + pw - 12, H - 7);
+
+  /* area + line */
+  g.beginPath(); g.moveTo(X(h[0].t), mt + ph);
+  for(i = 0; i < h.length; i++) g.lineTo(X(h[i].t), Y(h[i].rpm));
+  g.lineTo(X(h[h.length-1].t), mt + ph); g.closePath();
+  g.fillStyle = css("--accent-soft"); g.fill();
+
+  g.beginPath();
+  for(i = 0; i < h.length; i++){ var xx = X(h[i].t), yy = Y(h[i].rpm); i ? g.lineTo(xx, yy) : g.moveTo(xx, yy); }
+  g.strokeStyle = accent; g.lineWidth = 2; g.lineJoin = "round"; g.lineCap = "round"; g.stroke();
+
+  /* emphasised endpoint */
+  var last = h[h.length-1];
+  g.beginPath(); g.arc(X(last.t), Y(last.rpm), 4.5, 0, 6.2832);
+  g.fillStyle = accent; g.fill(); g.strokeStyle = surface; g.lineWidth = 2; g.stroke();
+
+  elTrendMeta.textContent = "min " + fmt(lo) + " · max " + fmt(hi) + " · spread " + fmt(hi - lo) + " rpm";
+
+  /* hover */
+  var tip = $("trendTip");
+  if(trendHover != null && trendHover >= ml && trendHover <= ml + pw){
+    var ht = t0 + (trendHover - ml)/pw*60000, near = h[0];
+    for(i = 0; i < h.length; i++) if(Math.abs(h[i].t - ht) < Math.abs(near.t - ht)) near = h[i];
+    var nx = X(near.t), ny = Y(near.rpm);
+    g.strokeStyle = ink3; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(nx, mt); g.lineTo(nx, mt + ph); g.stroke();
+    g.beginPath(); g.arc(nx, ny, 5.5, 0, 6.2832); g.strokeStyle = accent; g.lineWidth = 2; g.stroke();
+    tip.className = "tip on"; tip.style.left = nx + "px"; tip.style.top = ny + "px";
+    tip.textContent = fmt(near.rpm) + " rpm · " + ((now - near.t)/1000).toFixed(1) + " s ago";
+  } else { tip.className = "tip"; }
+}
+
+/* ============================ demo driver ============================ */
+var demoTimer = 0;
+function demoTick(){
+  S.demoPhase += 0.1;
+  /* governed head speed with a little wander, as an ESC governor actually holds */
+  var jitter = Math.sin(S.demoPhase*0.9)*7 + Math.sin(S.demoPhase*2.7)*4;
+  var rpm = S.demoRpm + jitter;
+  S.demoActual = rpm;                 /* compare against what was really injected */
+  frame(synth(rpm, S.blades, S.binHz, 2600));
+}
+function seedDemoHistory(){
+  var now = performance.now();
+  S.hist.length = 0;
+  for(var i = 0; i < 120; i++){
+    var t = now - (120 - i)*500;
+    var p = i/119;
+    var rpm = p < 0.28
+      ? S.rpmMin + (S.demoRpm - S.rpmMin)*(p/0.28)                    /* spool-up */
+      : S.demoRpm + Math.sin(i*0.34)*9 + Math.sin(i*0.11)*6;          /* governed */
+    S.hist.push({ t:t, rpm:rpm });
+    if(rpm > S.peak) S.peak = rpm;
+  }
+}
+function startDemo(){
+  stopMic();
+  S.mode = "demo";
+  elPill.textContent = "Demo signal"; elPill.className = "pill";
+  elVTitle.textContent = "Self-test · known signal";
+  elVGrid.children[0].firstChild.textContent = "Injected";
+  elVGrid.children[1].firstChild.textContent = "Measured";
+  elVGrid.children[2].firstChild.textContent = "Error";
+  elVSlider.hidden = false;
+  elVNote.textContent = "A synthetic 2-blade rotor signature is fed straight into the detector — harmonics, a pink noise floor, and the low-frequency rolloff a phone mic actually has. If measured tracks injected, the maths is sound. Then switch to the microphone.";
+  elStart.textContent = "Start microphone";
+  elMeter.style.width = "0%"; elMeterVal.innerHTML = "—";
+  S.raw.length = 0; resetTracks();
+  seedDemoHistory();
+  demoTick();
+  clearInterval(demoTimer);
+  if(!reduceMotion) demoTimer = setInterval(demoTick, 100);
+  setPressed($("mDemo"), true); setPressed($("mMic"), false); setPressed($("mFile"), false);
+}
+
+/* ============================ recording ============================ */
+/* Decoding a file straight into the analyser removes the speaker-and-microphone
+   path entirely, which is the only honest way to test against a clip whose real
+   head speed you already know. It needs no mic permission either. */
+function startFile(file){
+  stopMic();
+  elErr.hidden = true;
+  var AC = window.AudioContext || window.webkitAudioContext;
+  if(!AC || !window.OfflineAudioContext){ return fail("<b>This browser can\u2019t decode audio files.</b> Use Chrome or Safari."); }
+  audio.ctx = new AC();
+  S.sampleRate = audio.ctx.sampleRate; S.binHz = S.sampleRate/FFT;
+
+  file.arrayBuffer()
+    .then(function(buf){ return audio.ctx.decodeAudioData(buf); })
+    .then(function(abuf){
+      var an = audio.ctx.createAnalyser();
+      an.fftSize = FFT; an.smoothingTimeConstant = 0;
+      audio.analyser = an;
+      audio.dbBuf = new Float32Array(an.frequencyBinCount);
+      audio.timeBuf = new Float32Array(an.fftSize);
+
+      var src = audio.ctx.createBufferSource();
+      src.buffer = abuf;
+      src.connect(an);                 /* analyser only - nothing reaches the speakers */
+      audio.fileSrc = src;
+      audio.fileName = file.name;
+      audio.fileDur = abuf.duration;
+      audio.fileT0 = audio.ctx.currentTime;
+      src.onended = function(){ audio.fileEnded = true; };
+      audio.fileEnded = false;
+      src.start();
+
+      S.mode = "file"; S.raw.length = 0; resetTracks(); S.pending.length = 0;
+      S.hist.length = 0; S.rpm = null; S.freq = null; S.peak = 0; S.other = null;
+      elPill.textContent = "Recording"; elPill.className = "pill live";
+      elVTitle.textContent = "Recording";
+      elVGrid.children[0].firstChild.textContent = "Position";
+      elVGrid.children[1].firstChild.textContent = "Length";
+      elVGrid.children[2].firstChild.textContent = "Sample rate";
+      elVSlider.hidden = true;
+      elVNote.textContent = "Decoded straight into the detector \u2014 no speaker, no microphone, nothing to colour the signal. This is the setup to use when you already know the clip\u2019s real head speed.";
+      elStart.textContent = "Stop";
+      setPressed($("mDemo"), false); setPressed($("mMic"), false); setPressed($("mFile"), true);
+      loop();
+    })
+    .catch(function(){
+      fail("<b>Couldn\u2019t decode that file.</b> The browser could not read an audio track from it. An .m4a, .mp3, .wav or .ogg works most reliably; some video containers do not decode here.");
+      startDemo();
+    });
+}
+
+/* ============================ microphone ============================ */
+function stopMic(){
+  clearInterval(demoTimer); demoTimer = 0;
+  if(audio.raf) cancelAnimationFrame(audio.raf), audio.raf = 0;
+  if(audio.fileSrc){ try{ audio.fileSrc.stop(); }catch(e){} audio.fileSrc.disconnect(); audio.fileSrc = null; }
+  if(audio.stream){ audio.stream.getTracks().forEach(function(t){ t.stop(); }); audio.stream = null; }
+  if(audio.ctx){ audio.ctx.close().catch(function(){}); audio.ctx = null; }
+  if(audio.wake){ try{ audio.wake.release(); }catch(e){} audio.wake = null; }
+  audio.analyser = null;
+}
+
+/* Asking for a mono, completely unprocessed stream is the right thing to want,
+   but it is a hard constraint and some Android audio paths cannot open that
+   configuration at all - which surfaces as NotReadableError, not as
+   OverconstrainedError. So ask for the best case first and step down, rather
+   than retrying the same impossible request. */
+var MIC_TRIES = [
+  { label:"unprocessed mono",
+    c:{ audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:1 } } },
+  { label:"unprocessed",
+    c:{ audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false } } },
+  { label:"unprocessed if possible",
+    c:{ audio:{ echoCancellation:{ideal:false}, noiseSuppression:{ideal:false}, autoGainControl:{ideal:false} } } },
+  { label:"device default",
+    c:{ audio:true } }
+];
+
+function startMic(){
+  elErr.hidden = true;
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    return fail("<b>This browser can\u2019t open a microphone.</b> <code>getUserMedia</code> is unavailable here \u2014 use Chrome or Safari, over https, in a normal browser tab.");
+  }
+  stopMic();                      /* never ask for a mic while still holding one */
+
+  var i = 0, lastErr = null;
+  (function attempt(){
+    if(i >= MIC_TRIES.length) return failWithDiagnostics(lastErr);
+    var t = MIC_TRIES[i++];
+    navigator.mediaDevices.getUserMedia(t.c)
+      .then(function(stream){ onMicStream(stream, t.label); })
+      .catch(function(e){
+        lastErr = e;
+        /* A refusal by the person is final - stepping down cannot help. */
+        if(e && e.name === "NotAllowedError") return failWithDiagnostics(e);
+        setTimeout(attempt, 250);
+      });
+  })();
+}
+
+function onMicStream(stream, how){
+  clearInterval(demoTimer); demoTimer = 0;
+  audio.stream = stream;
+  var AC = window.AudioContext || window.webkitAudioContext;
+  audio.ctx = new AC();
+  if(audio.ctx.state === "suspended") audio.ctx.resume();
+  S.sampleRate = audio.ctx.sampleRate;
+  S.binHz = S.sampleRate/FFT;
+
+  var an = audio.ctx.createAnalyser();
+  an.fftSize = FFT; an.smoothingTimeConstant = 0;
+  audio.analyser = an;
+  audio.src = audio.ctx.createMediaStreamSource(stream);
+  audio.src.connect(an);
+  audio.dbBuf = new Float32Array(an.frequencyBinCount);
+  audio.timeBuf = new Float32Array(an.fftSize);
+
+  /* What the device actually gave us, which is not always what was asked for. */
+  var tr = stream.getAudioTracks()[0];
+  var st = (tr && tr.getSettings) ? tr.getSettings() : {};
+  var processed = !!(st.echoCancellation || st.noiseSuppression || st.autoGainControl);
+
+  S.mode = "mic"; S.raw.length = 0; S.pending.length = 0; resetTracks();
+  S.hist.length = 0; S.rpm = null; S.freq = null; S.other = null;
+  elPill.textContent = "Live \u00b7 microphone"; elPill.className = "pill live";
+  elVTitle.textContent = "Input signal";
+  elVGrid.children[0].firstChild.textContent = "Level dBFS";
+  elVGrid.children[1].firstChild.textContent = "Headroom";
+  elVGrid.children[2].firstChild.textContent = "Sample rate";
+  elVSlider.hidden = true;
+  elVNote.textContent = processed
+    ? "This device would not open an unprocessed stream, so it is running on \u201c" + how + "\u201d with its own processing active. Auto-gain and noise suppression fight a steady low tone, so expect a weaker lock, especially below 1 500 rpm. Recording mode is unaffected."
+    : "Echo cancellation, noise suppression and auto-gain are all switched off (\u201c" + how + "\u201d) so the low-frequency rotor tone survives. Keep the level meter out of the red \u2014 clipping manufactures harmonics and pushes the reading high.";
+  elStart.textContent = "Stop microphone";
+  setPressed($("mDemo"), false); setPressed($("mMic"), true); setPressed($("mFile"), false);
+
+  var h = $("frameHint");
+  if(processed){
+    h.innerHTML = "<b>Running with device audio processing on.</b> An unprocessed stream was refused, so readings may be less steady at low head speeds.";
+    h.hidden = false;
+  } else if(!framed) h.hidden = true;
+
+  if(navigator.wakeLock) navigator.wakeLock.request("screen").then(function(w){ audio.wake = w; }).catch(function(){});
+  loop();
+}
+
+/* When every attempt fails, say what the browser actually reports rather than
+   leaving the person to guess which of the possible causes it was. */
+function failWithDiagnostics(e){
+  var state = null, inputs = null, pending = 2;
+  function done(){
+    if(--pending) return;
+    var diag = ["error: " + ((e && e.name) || "unknown")];
+    if(hostMic()) diag.push("android: " + hostMic(), "webview: " + (hostEvent() || "?"));
+    else diag.push("permission: " + (state || "not reported"));
+    diag.push(inputs == null ? "device list unavailable"
+                             : inputs + " audio input" + (inputs === 1 ? "" : "s"));
+    diag.push(envLabel());
+    var extra = (hostMic() === "blocked" || hostMic() === "denied")
+      ? '<button class="btn" id="openHostSettings" style="margin-top:11px">Open app settings</button>' : "";
+    fail(micFailure(e, state) + '<div class="diag">' + diag.join(" \u00b7 ") + "</div>" + extra);
+    startDemo();
+  }
+  try{
+    navigator.permissions.query({ name:"microphone" })
+      .then(function(pm){ state = pm.state; done(); })
+      .catch(function(){ done(); });
+  }catch(err){ done(); }
+  try{
+    navigator.mediaDevices.enumerateDevices()
+      .then(function(ds){ inputs = ds.filter(function(d){ return d.kind === "audioinput"; }).length; done(); })
+      .catch(function(){ done(); });
+  }catch(err){ done(); }
+}
+
+function fail(html){ elErr.innerHTML = html; elErr.hidden = false; }
+elErr.addEventListener("click", function(ev){
+  if(ev.target && ev.target.id === "openHostSettings" && host()) host().openAppSettings();
+});
+
+/* Inside a WebView, navigator.permissions reports "prompt" whatever the app's
+   real Android permission is, so it cannot be reasoned from. The shell exposes
+   the truth instead. Absent outside the Android app. */
+function host(){ try{ return window.ZelionTachHost || null; }catch(err){ return null; } }
+function hostMic(){ try{ return host() ? host().micPermission() : null; }catch(err){ return null; } }
+function hostEvent(){ try{ return host() ? host().lastEvent() : null; }catch(err){ return null; } }
+
+function envLabel(){
+  var ua = navigator.userAgent || "", standalone = false;
+  try{ standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; }catch(err){}
+  if(/;\s*wv\)/.test(ua)) return "android app";
+  return standalone ? "installed app" : "browser tab";
+}
+
+/* permState is what the Permissions API reports, or null when it will not say.
+   It decides the message: a NotReadableError while permission still reads
+   "prompt" is not a busy device, it is a request that failed before anyone was
+   ever asked. */
+function micFailure(e, permState){
+  var name = (e && e.name) ? e.name : "error";
+  var link = '<a href="' + SHARE_URL + '" target="_blank" rel="noopener">' + SHARE_URL + '</a>';
+  if(name === "NotAllowedError" && framed)
+    return "<b>This preview frame can\u2019t open a microphone.</b> Embedded pages are only given one if the page that frames them grants it, and permission settings won\u2019t change that. Open the tach in your browser instead \u2014 use the share control at the top of this panel, or go to " + link + " \u2014 then allow the mic when asked. If it is still blocked there, the artifact host doesn\u2019t grant microphone access at all and the page needs to run from your own https site.";
+  if(name === "NotAllowedError")
+    return "<b>Microphone permission denied.</b> Allow microphone access for this site in your browser\u2019s site settings, then tap Start microphone again.";
+  if(name === "NotFoundError" || name === "DevicesNotFoundError")
+    return "<b>No microphone found.</b> This device reports no audio input.";
+  var hp = hostMic();
+  if(hp === "blocked")
+    return "<b>Microphone is switched off for this app.</b> Android has it blocked and will not ask again, so nothing the app does can open it. Turn it on under Permissions, then tap Start microphone again. Recording mode works without it.";
+  if(hp === "denied")
+    return "<b>Microphone permission was declined.</b> Tap Start microphone again and choose Allow when Android asks.";
+  if(name === "NotReadableError" && hp === "granted")
+    return "<b>Android allows the microphone, but the device would not open it.</b> Every configuration was refused, from unprocessed mono down to the device default. Something else is holding the microphone \u2014 close any recorder, voice assistant, call, or another copy of this app \u2014 then tap Start microphone again. Recording mode is unaffected.";
+  if(name === "NotReadableError" && permState && permState !== "granted")
+    return "<b>The microphone was never actually granted.</b> The request failed before you were asked for it \u2014 permission still reads \u201c" + permState + "\u201d. In the Android app this means the app\u2019s own microphone permission is off: open Android Settings \u2192 Apps \u2192 Zelion Tach \u2192 Permissions and turn Microphone on, then tap Start microphone again. In a browser, clear this site\u2019s permissions and reload so it can ask afresh.";
+  if(name === "NotReadableError")
+    return "<b>The microphone was granted but could not be opened.</b> Every stream configuration was refused, from unprocessed mono down to the device default, so this is the audio hardware itself saying no. Close any other copy of this page, stop any recorder, voice assistant or call, and check the microphone is not switched off in your device\u2019s privacy settings. Then tap Start microphone again.";
+  return "<b>Couldn\u2019t open the microphone</b> (" + name + "). The page must be served over https from a top-level window.";
+}
+
+var lastTick = 0;
+function loop(){
+  audio.raf = requestAnimationFrame(loop);
+  var t = performance.now();
+  if(t - lastTick < 70) return;
+  lastTick = t;
+
+  var an = audio.analyser; if(!an) return;
+  an.getFloatTimeDomainData(audio.timeBuf);
+  var pk = 0, sum = 0, n = 0;
+  for(var i = 0; i < audio.timeBuf.length; i += 4){
+    var v = Math.abs(audio.timeBuf[i]);
+    if(v > pk) pk = v;
+    sum += v*v; n++;
+  }
+  S.clipped = pk > 0.985;
+  S.level = 20*Math.log10(Math.sqrt(sum/n) + 1e-12);
+  var pct = Math.max(0, Math.min(1, (S.level + 60)/60));
+  elMeter.style.width = (pct*100).toFixed(0) + "%";
+  elMeter.className = S.clipped ? "hot" : "";
+  elMeterVal.textContent = (isFinite(S.level) ? S.level.toFixed(0) : "-∞") + " dBFS";
+
+  an.getFloatFrequencyData(audio.dbBuf);
+  frame(audio.dbBuf);
+}
+
+/* ============================ controls ============================ */
+function setPressed(btn, on){ btn.setAttribute("aria-pressed", on ? "true" : "false"); }
+
+$("mDemo").onclick = function(){ if(S.mode !== "demo") startDemo(); };
+$("mMic").onclick  = function(){ if(S.mode !== "mic") startMic(); };
+$("mFile").onclick = function(){ $("fileInput").click(); };
+$("fileInput").onchange = function(){
+  var f = this.files && this.files[0];
+  if(f) startFile(f);
+  this.value = "";                     /* so the same file can be reloaded */
+};
+elStart.onclick    = function(){ S.mode === "demo" ? startMic() : startDemo(); };
+
+$("resetBtn").onclick = function(){
+  S.peak = 0; S.hist.length = 0; S.raw.length = 0; resetTracks();
+  if(S.mode === "demo") seedDemoHistory();
+  paint();
+};
+
+Array.prototype.forEach.call(document.querySelectorAll(".bl"), function(b){
+  b.onclick = function(){
+    Array.prototype.forEach.call(document.querySelectorAll(".bl"), function(o){ setPressed(o, o === b); });
+    S.blades = +b.dataset.b;
+    S.raw.length = 0; S.hist.length = 0; S.peak = 0; resetTracks();
+    if(S.mode === "demo"){ seedDemoHistory(); demoTick(); } else paint();
+  };
+});
+
+function bandChange(){
+  var a = +$("rMin").value, b = +$("rMax").value;
+  if(!(a > 0) || !(b > a)) return;
+  S.rpmMin = a; S.rpmMax = b;
+  elScale.children[0].textContent = fmt(a);
+  elScale.children[1].textContent = fmt(b);
+  elTestRpm.min = a; elTestRpm.max = b;
+  if(S.demoRpm < a || S.demoRpm > b){ S.demoRpm = Math.round((a + b)/2); elTestRpm.value = S.demoRpm; elTestLab.textContent = fmt(S.demoRpm) + " rpm"; }
+  S.raw.length = 0; S.hist.length = 0; S.peak = 0; resetTracks();
+  if(S.mode === "demo"){ seedDemoHistory(); demoTick(); } else paint();
+}
+$("rMin").onchange = bandChange;
+$("rMax").onchange = bandChange;
+
+elTestRpm.oninput = function(){
+  S.demoRpm = +elTestRpm.value;
+  elTestLab.textContent = fmt(S.demoRpm) + " rpm";
+  if(S.mode === "demo"){ S.raw.length = 0; demoTick(); }
+};
+
+/* hover probes */
+function bindHover(cvId, set){
+  var cv = $(cvId);
+  cv.addEventListener("pointermove", function(e){
+    var r = cv.getBoundingClientRect();
+    set(e.clientX - r.left);
+    paint();
+  });
+  cv.addEventListener("pointerleave", function(){ set(null); paint(); });
+}
+bindHover("specCv", function(x){ specHover = x; });
+bindHover("trendCv", function(x){ trendHover = x; });
+
+var rt = 0;
+window.addEventListener("resize", function(){ clearTimeout(rt); rt = setTimeout(paint, 120); });
+try{ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paint); }catch(e){}
+
+/* ============================ boot ============================ */
+(function(){
+  if(!framed) return;
+  var pol = micAllowedByPolicy();
+  var h = $("frameHint");
+  h.innerHTML = (pol === false)
+    ? "<b>Microphone unavailable in this frame.</b> Self-test works here, but live capture needs the page open in a browser tab: <a href=\"" + SHARE_URL + "\" target=\"_blank\" rel=\"noopener\">open the tach</a>."
+    : "<b>Running in an embedded preview.</b> If the microphone comes back blocked, open the page in a browser tab instead: <a href=\"" + SHARE_URL + "\" target=\"_blank\" rel=\"noopener\">open the tach</a>.";
+  h.hidden = false;
+})();
+
+elScale.children[0].textContent = fmt(S.rpmMin);
+elScale.children[1].textContent = fmt(S.rpmMax);
+elTestLab.textContent = fmt(S.demoRpm) + " rpm";
+startDemo();
+
+/* exposed for offline verification */
+window.__tach = { analyse:analyse, updateTracks:updateTracks, chooseTrack:chooseTrack,
+                  resetTracks:resetTracks, synth:synth, tracks:function(){ return tracks; } };
+
+})();
+</script>
+
+<script>
+if("serviceWorker" in navigator){
+  addEventListener("load", function(){ navigator.serviceWorker.register("./sw.js").catch(function(){}); });
+}
+</script>
+</body>
+</html>

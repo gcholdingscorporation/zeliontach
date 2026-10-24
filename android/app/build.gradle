@@ -1,0 +1,90 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.zelion.tach'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.zelion.tach'
+        // 26 is the first release with XML adaptive icons, which is what lets
+        // this project ship without any binary image assets.
+        minSdk 26
+        targetSdk 34
+        // A tag release overrides both: the Release APK workflow turns v1.2.3
+        // into versionName 1.2.3 and a versionCode derived from it, so each
+        // release upgrades the one before it in place. A plain local or CI
+        // build, with neither variable set, keeps 1 and 1.0 as before.
+        versionCode Integer.parseInt(System.getenv('ZELION_VERSION_CODE') ?: '1')
+        versionName(System.getenv('ZELION_VERSION_NAME') ?: '1.0')
+    }
+
+    // A throwaway key committed alongside the project, so that successive
+    // builds upgrade in place instead of failing with a signature mismatch.
+    // It is not a secret and must never be used to publish anything.
+    signingConfigs {
+        sideload {
+            storeFile file('../sideload.keystore')
+            storePassword 'rotorflight'
+            keyAlias 'sideload'
+            keyPassword 'rotorflight'
+        }
+
+        // The real publishing key, which exists only while a tag release is
+        // building: the workflow decodes it from repository secrets into a
+        // temporary file and passes the path and passwords through the
+        // environment. Nothing about it is committed, and when the
+        // environment is empty this config stays unconfigured and unused.
+        publish {
+            def keystore = System.getenv('ZELION_KEYSTORE_FILE')
+            if (keystore) {
+                storeFile file(keystore)
+                storePassword System.getenv('ZELION_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ZELION_KEY_ALIAS')
+                keyPassword System.getenv('ZELION_KEY_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.sideload
+        }
+        release {
+            signingConfig(System.getenv('ZELION_KEYSTORE_FILE')
+                    ? signingConfigs.publish
+                    : signingConfigs.sideload)
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // WebViewAssetLoader: serves the bundled page over https so getUserMedia
+    // will run. A file:// page is not a secure context and is refused a mic.
+    implementation 'androidx.webkit:webkit:1.11.0'
+}
+
+// The tach is the same single page that ships on the web. Copy it in rather
+// than duplicating it, so the APK can never drift from the hosted version.
+def webRoot = rootProject.file('..')
+
+tasks.register('copyTach', Copy) {
+    doFirst {
+        if (!new File(webRoot, 'index.html').exists()) {
+            throw new GradleException("Missing ${webRoot}/index.html")
+        }
+    }
+    from(webRoot) {
+        include 'index.html', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png'
+    }
+    into layout.projectDirectory.dir('src/main/assets')
+}
+
+tasks.named('preBuild') { dependsOn 'copyTach' }
