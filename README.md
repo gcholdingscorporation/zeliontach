@@ -161,6 +161,22 @@ Keep `release.jks` somewhere safe and offline, and never commit it. Every
 future release has to be signed with the same key, or an installed copy cannot
 be upgraded in place — it has to be uninstalled first, losing its settings.
 
+### Getting a test build onto a phone without all that
+
+Run **Build APK** by hand from the Actions tab with **serve** ticked. It builds
+the release variant, signs it with the committed throwaway `sideload.keystore`,
+and publishes it as a prerelease at the `sideload` tag, which downloads with no
+login from a link that never changes:
+
+    https://github.com/gcholdingscorporation/zeliontach/releases/download/sideload/zelion-tach-sideload.apk
+
+That tag is replaced in place each time, so the link is always the newest test
+build, and its `versionCode` comes from the run number so a later one installs
+over an earlier one. It is a test build, not a release: the key is in this
+repository, so anyone who has the repository can sign as this app. Going from a
+test build to a real release needs the old copy uninstalled first, because the
+two are signed with different keys.
+
 A tag with a suffix — `v1.1.0-beta1` — is published as a prerelease, and the
 release that follows it upgrades it in place. `versionName` comes from the tag;
 `versionCode` is derived from it so it always increases. A build with no tag
